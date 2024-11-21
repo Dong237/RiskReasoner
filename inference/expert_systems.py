@@ -12,6 +12,7 @@ from sklearn.metrics import (
     accuracy_score,
     roc_auc_score,
     precision_recall_curve,
+    roc_curve,
     f1_score,
     auc
 )
@@ -32,7 +33,7 @@ LABEL = "Loan Status"  # Global variable for the target column
 
 def ks_score(true_labels, predicted_probabilities):
     """Calculate the KS score."""
-    fpr, tpr, thresholds = precision_recall_curve(true_labels, predicted_probabilities)
+    fpr, tpr, _ = roc_curve(true_labels, predicted_probabilities)
     return max(tpr - fpr)
 
 
