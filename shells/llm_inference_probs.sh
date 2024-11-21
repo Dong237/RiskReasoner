@@ -4,14 +4,15 @@ export CUDA_VISIBLE_DEVICES=1,2,3
 # Set variables
 # MODEL_NAME_OR_PATH="/data/youxiang/huggingface/Qwen2.5-Math-7B-Instruct"
 # MODEL_NAME_OR_PATH="/data/tangbo/plms/Qwen2.5-7B-Instruct/"
-# MODEL_NAME_OR_PATH="/data/youxiang/huggingface/Llama-2-7b-chat-hf"
+MODEL_NAME_OR_PATH="/data/youxiang/huggingface/Llama-2-7b-chat-hf"
 # LORA_WEIGHTS="/data/youxiang/repos/RiskReasoner/lora_weights/CALM"
 # MODEL_NAME_OR_PATH="/data/youxiang/huggingface/Llama-3.1-8B-Instruct"
-MODEL_NAME_OR_PATH="/data/youxiang/huggingface/Qwen2.5-14B-Instruct-GPTQ-Int8"
+# MODEL_NAME_OR_PATH="/data/youxiang/huggingface/Qwen2.5-14B-Instruct-GPTQ-Int8"
+# MODEL_NAME_OR_PATH="/data/tangkai/models/Qwen2.5-72B-Instruct-GPTQ-Int4"
 DATA_PATH="datasets/llms/test_balanced.parquet"
 
 # Extract model name and dataset name
-MODEL_NAME=$(basename "$MODEL_NAME_OR_PATH") # Extracts "Qwen2.5-Math-7B-Instruct"
+MODEL_NAME=$(basename "$MODEL_NAME_OR_PATH") # Extracts e.g., "Qwen2.5-Math-7B-Instruct"
 DATASET_NAME=$(basename "$DATA_PATH" .parquet) # Extracts "test_balanced"
 
 # Set dynamic paths
