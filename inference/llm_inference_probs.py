@@ -20,9 +20,6 @@ from utils import (
     compute_binary_metrics_from_results
 )
 
-import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
-
 
 SYSTEM_PROMPT = "You are a helpful assistant that classifies binary prompts into 'good' or 'bad'."
 
@@ -38,10 +35,22 @@ class Arguments:
             "help": "Path to the directory containing the model weights and tokenizer config."
         }
     )
-    data_path: str = field(
+    train_data_path: str = field(
         default="datasets/train.parquet",
         metadata={
-            "help": "Path to the .parquet file containing the input data."
+            "help": "Path to the .parquet file containing the training data for few shot learning."
+        }
+    )
+    test_data_path: str = field(
+        default="datasets/test.parquet",
+        metadata={
+            "help": "Path to the .parquet file containing the test data."
+        }
+    )
+    few_shot: int = field(
+        default=None,
+        metadata={
+            "help": "n-shot to use for while inferencing"
         }
     )
     inference_output_path: str = field(
@@ -79,6 +88,7 @@ def _load_model_and_tokenizer(model_name_or_path, lora_weights=None):
             logging.info(f"Loading LoRA weights from {lora_weights}")
             model = PeftModel.from_pretrained(model, lora_weights) 
         tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+        tokenizer.pad_token_id = tokenizer.eos_token_id
         logging.info("Model and tokenizer loaded successfully.")
         return model, tokenizer
     except Exception as e:
@@ -148,15 +158,16 @@ def _generate(model, tokenizer, prompt, choices):
         ##############################
         ## Generate text prediction ##
         ##############################
-        generated_ids = model.generate(
-            **model_inputs,
-            do_sample=False,
-            max_new_tokens=512,
-        )
-        generated_ids = [
-            output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
-        ]
-        response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        with torch.no_grad():
+            generated_ids = model.generate(
+                **model_inputs,
+                do_sample=False,
+                max_new_tokens=512,
+            )
+            generated_ids = [
+                output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
+            ]
+            response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
         text_prediction = response.strip().lower()
         if text_prediction == good_token:
             text_prediction_lable = 0 
@@ -170,6 +181,35 @@ def _generate(model, tokenizer, prompt, choices):
         logging.error(f"Error during generation for prompt '{prompt}': {e}")
         raise
 
+
+def _generate_few_shot_examples(dataframe, n):
+    import pandas as pd  # Ensure pandas is imported
+    
+    split_token = "Text:"
+    examples = "Here are some provided examples: \n\n"
+
+    # Split the dataframe into "good" and "bad" based on the "answer" column
+    good_df = dataframe[dataframe["answer"] == "good"]
+    bad_df = dataframe[dataframe["answer"] == "bad"]
+    
+    # Calculate how many "good" and "bad" examples are needed
+    num_good = (n // 2) + (n % 2)  # "good" gets the extra example if n is odd
+    num_bad = n // 2
+
+    # Sample the required number of examples from each subset
+    good_samples = good_df.sample(n=num_good, random_state=42)
+    bad_samples = bad_df.sample(n=num_bad, random_state=42)
+
+    # Combine and shuffle the sampled examples
+    sampled_df = pd.concat([good_samples, bad_samples]).sample(frac=1, random_state=42)  # Shuffle the combined samples
+
+    # Construct the examples string
+    for _, sample in sampled_df.iterrows():
+        query = split_token + sample["query"].split(split_token)[-1]
+        answer = sample["answer"]
+        examples += query + answer + "\n\n"
+    return examples
+    
 
 def main():
     # Set up logging
@@ -191,8 +231,8 @@ def main():
 
     # Load input data
     try:
-        logging.info(f"Loading data from {args.data_path}...")
-        data = pd.read_parquet(args.data_path)
+        logging.info(f"Loading data from {args.test_data_path}...")
+        data = pd.read_parquet(args.test_data_path)
         logging.info(f"Data loaded successfully. Total rows: {len(data)}")
     except Exception as e:
         logging.error(f"Failed to load data: {e}")
@@ -203,12 +243,21 @@ def main():
 
     # Iterate over each row in the dataset with a progress bar
     logging.info("Starting inference...")
+    
+    if args.few_shot:
+        logging.info("Generating few-shot examples...")
+        data_to_sample_from = pd.read_parquet(args.train_data_path)
+        examples = _generate_few_shot_examples(data_to_sample_from, args.few_shot)
+    
     for _, row in tqdm(data.iterrows(), total=len(data), desc="Processing rows"):
         try:
             query = row["query"]
             choices = row["choices"] 
             gold_label = row["gold"]
             record_id = row["id"]
+            
+            # Add few shot examples if specified
+            query = examples + query if args.few_shot else query
 
             # Generate probabilities
             pred_prob, text_prediction_lable = _generate(model, tokenizer, query, choices)
@@ -225,19 +274,28 @@ def main():
         except Exception as e:
             logging.error(f"Error processing row with id {row.get('id', 'unknown')}: {e}")
 
+    # Adjust the output paths based on the model type
     if args.lora_weights:
         args.evaluation_output_path = args.evaluation_output_path.replace(".json", f"_lora.json")
         args.inference_output_path = args.inference_output_path.replace(".json", f"_lora.json")
+        
+    # Adjust the output paths based on whether few shot examples are used
+    if args.few_shot:
+        args.evaluation_output_path = args.evaluation_output_path.replace(".json", f"_{args.few_shot}_shot.json")
+        args.inference_output_path = args.inference_output_path.replace(".json", f"_{args.few_shot}_shot.json")
+    
     # Print out evaluation results
     logging.info(f"Evaluating the results...")
     metrics = compute_binary_metrics_from_results(results)
     print(f"Evaluation on the inference results:{metrics}")
     logging.info(f"Saving evaluation results to {args.evaluation_output_path}...")
+    os.makedirs(os.path.dirname(args.evaluation_output_path), exist_ok=True)
     jdump(metrics, args.evaluation_output_path)
     logging.info("Evaluation results saved successfully.")
     
     # Save results to a JSON file using jdump
     logging.info(f"Saving inference results to {args.inference_output_path}...")
+    os.makedirs(os.path.dirname(args.inference_output_path), exist_ok=True)
     jdump(results, args.inference_output_path)
     logging.info("Inference results saved successfully.")
 
