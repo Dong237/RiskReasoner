@@ -1,33 +1,70 @@
 #!/bin/bash
-export CUDA_VISIBLE_DEVICES=1,2,3
 
-# Set variables
-# MODEL_NAME_OR_PATH="/data/youxiang/huggingface/Qwen2.5-Math-7B-Instruct"
-# MODEL_NAME_OR_PATH="/data/tangbo/plms/Qwen2.5-7B-Instruct/"
-MODEL_NAME_OR_PATH="/data/youxiang/huggingface/Llama-2-7b-chat-hf"
-# LORA_WEIGHTS="/data/youxiang/repos/RiskReasoner/lora_weights/CALM"
-# MODEL_NAME_OR_PATH="/data/youxiang/huggingface/Llama-3.1-8B-Instruct"
-# MODEL_NAME_OR_PATH="/data/youxiang/huggingface/Qwen2.5-14B-Instruct-GPTQ-Int8"
-# MODEL_NAME_OR_PATH="/data/tangkai/models/Qwen2.5-72B-Instruct-GPTQ-Int4"
-DATA_PATH="datasets/llms/test_balanced.parquet"
+# This bash script starts experiments on every LLM automatically, 
+# including CALM model which requires the downloaded LoRA weights 
 
-# Extract model name and dataset name
-MODEL_NAME=$(basename "$MODEL_NAME_OR_PATH") # Extracts e.g., "Qwen2.5-Math-7B-Instruct"
-DATASET_NAME=$(basename "$DATA_PATH" .parquet) # Extracts "test_balanced"
+export CUDA_VISIBLE_DEVICES=2,3
 
-# Set dynamic paths
-INFERENCE_OUTPUT_PATH="results/inference/${MODEL_NAME}_${DATASET_NAME}.json"
-EVALUATION_OUTPUT_PATH="results/evaluation/${MODEL_NAME}_${DATASET_NAME}.json"
+# Few-shot variable
+FEW_SHOT_N=8
 
+# List of models to test (excluding the special model)
+MODELS=(
+    # "/data/youxiang/huggingface/Qwen2.5-Math-7B-Instruct"
+    "/data/youxiang/huggingface/Llama-3.1-8B-Instruct"
+    # "/data/tangbo/plms/Qwen2.5-7B-Instruct/"
+    # "/data/youxiang/huggingface/Llama-2-7b-chat-hf"
+    # "/data/youxiang/huggingface/Qwen2.5-14B-Instruct-GPTQ-Int8"
+    # "/data/tangkai/models/Qwen2.5-72B-Instruct-GPTQ-Int4"
+)
 
-# Print paths for debugging
-echo "Inference Output Path: $INFERENCE_OUTPUT_PATH"
-echo "Evaluation Output Path: $EVALUATION_OUTPUT_PATH"
+# Special case for model with LoRA weights
+SPECIAL_MODEL="/data/youxiang/huggingface/Llama-2-7b-chat-hf"
+LORA_WEIGHTS="/data/youxiang/repos/RiskReasoner/lora_weights/CALM"
 
-# Run inference
-python inference/llm_inference_probs.py \
-    --model_name_or_path "$MODEL_NAME_OR_PATH" \
-    --data_path "$DATA_PATH" \
-    --inference_output_path "$INFERENCE_OUTPUT_PATH" \
-    --evaluation_output_path "$EVALUATION_OUTPUT_PATH" \
-    # --lora_weights "$LORA_WEIGHTS"
+# Dataset paths
+TEST_DATA_PATH="datasets/llms/test_balanced.parquet"
+TRAIN_DATA_PATH="datasets/llms/train.parquet"
+
+# Extract dataset name
+DATASET_NAME=$(basename "$TEST_DATA_PATH" .parquet) # Extracts "test_balanced"
+
+# Create results directories if they don't exist
+mkdir -p results/inference
+mkdir -p results/evaluation
+
+# Loop over models (excluding the special model)
+for MODEL_NAME_OR_PATH in "${MODELS[@]}"; do
+    # Extract model name
+    MODEL_NAME=$(basename "$MODEL_NAME_OR_PATH") # Extracts e.g., "Qwen2.5-Math-7B-Instruct"
+
+    # Set dynamic paths
+    INFERENCE_OUTPUT_PATH="results/llms/inference/${MODEL_NAME}_${DATASET_NAME}.json"
+    EVALUATION_OUTPUT_PATH="results/llms/evaluation/${MODEL_NAME}_${DATASET_NAME}.json"
+
+    echo "Running experiment for $MODEL_NAME without LoRA weights"
+    python inference/llm_inference_probs.py \
+        --model_name_or_path "$MODEL_NAME_OR_PATH" \
+        --test_data_path "$TEST_DATA_PATH" \
+        --train_data_path "$TRAIN_DATA_PATH" \
+        --inference_output_path "$INFERENCE_OUTPUT_PATH" \
+        --evaluation_output_path "$EVALUATION_OUTPUT_PATH" \
+        # --few_shot "$FEW_SHOT_N"  ## comment out this line if you want zero shot
+done
+
+# # Run the special model after all the other models
+# SPECIAL_MODEL_NAME=$(basename "$SPECIAL_MODEL") # Extracts e.g., "Llama-2-7b-chat-hf"
+# INFERENCE_OUTPUT_PATH="results/llms/inference/${SPECIAL_MODEL_NAME}_${DATASET_NAME}.json"
+# EVALUATION_OUTPUT_PATH="results/llms/evaluation/${SPECIAL_MODEL_NAME}_${DATASET_NAME}.json"
+
+# echo "Running experiment for $SPECIAL_MODEL_NAME with LoRA weights: $LORA_WEIGHTS"
+# python inference/llm_inference_probs.py \
+#     --model_name_or_path "$SPECIAL_MODEL" \
+#     --test_data_path "$TEST_DATA_PATH" \
+#     --train_data_path "$TRAIN_DATA_PATH" \
+#     --inference_output_path "$INFERENCE_OUTPUT_PATH" \
+#     --evaluation_output_path "$EVALUATION_OUTPUT_PATH" \
+#     --lora_weights "$LORA_WEIGHTS" \
+#     --few_shot "$FEW_SHOT_N"  ## comment out this line if you want zero shot
+
+echo "All experiments completed!"
