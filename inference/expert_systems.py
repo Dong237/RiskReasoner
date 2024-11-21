@@ -7,6 +7,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import GaussianNB
 from sklearn.model_selection import GridSearchCV
+from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import (
     accuracy_score,
     roc_auc_score,
@@ -22,6 +23,9 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import setup_logging
+
+import warnings
+warnings.filterwarnings("ignore")
 
 LABEL = "Loan Status"  # Global variable for the target column
 
@@ -105,32 +109,125 @@ def train_and_evaluate_model(
     return metrics, best_model
 
 
-def main(
-    training_data_path, 
-    testing_data_path, 
-    metrics_output_path
-):
+def preprocess_combined_data(train_data, test_data, threshold=5):
+    """
+    Preprocess training and testing datasets by concatenating them,
+    encoding categorical features, and then splitting them back.
+    
+    Parameters:
+        train_data (pd.DataFrame): Training dataset.
+        test_data (pd.DataFrame): Testing dataset.
+        threshold (int): Max unique values for one-hot encoding. Otherwise, label encoding is used.
+    
+    Returns:
+        pd.DataFrame, pd.DataFrame: Processed training and testing datasets.
+    """
+    # Add a temporary column to identify dataset type
+    train_data = train_data.copy()
+    test_data = test_data.copy()
+    
+    train_data['__dataset_type'] = 'train'
+    test_data['__dataset_type'] = 'test'
+
+    # Concatenate train and test datasets
+    combined_data = pd.concat([train_data, test_data], axis=0)
+
+    # Encode the target column (Loan Status) into binary values
+    if LABEL in combined_data:
+        combined_data[LABEL] = combined_data[LABEL].map({
+            'Fully Paid': 1,
+            'Charged Off': 0
+        })
+        if combined_data[LABEL].isnull().any():
+            raise ValueError(f"Unexpected values in {LABEL}. Ensure it only contains 'Fully Paid' or 'Charged Off'.")
+
+    # Encode categorical features
+    categorical_columns = [
+        column for column in combined_data.select_dtypes(include=['object']).columns.tolist()
+        if column != LABEL and column != '__dataset_type'  # Exclude the LABEL and __dataset_type columns
+    ]
+
+    for column in categorical_columns:
+        unique_values = combined_data[column].nunique()
+
+        if unique_values <= threshold:
+            # Apply one-hot encoding
+            one_hot = pd.get_dummies(
+                combined_data[column],
+                prefix=column,
+                drop_first=False  # Keep all categories
+            )
+            combined_data = pd.concat([combined_data, one_hot], axis=1)
+            combined_data.drop(column, axis=1, inplace=True)
+        else:
+            # Apply label encoding
+            label_encoder = LabelEncoder()
+            combined_data[column] = label_encoder.fit_transform(combined_data[column])
+
+    # Split back into train and test datasets
+    train_data_processed = combined_data[combined_data['__dataset_type'] == 'train'].drop('__dataset_type', axis=1)
+    test_data_processed = combined_data[combined_data['__dataset_type'] == 'test'].drop('__dataset_type', axis=1)
+
+    return train_data_processed, test_data_processed
+
+
+def clean_feature_names(training_data, testing_data):
+    """
+    Ensure all column names in the DataFrame are strings and free of invalid characters.
+    """
+    
+    def clean(dataframe):
+        dataframe.columns = [
+            str(column).replace("[", "_")
+                    .replace("]", "_")
+                    .replace("<", "_")
+                    .replace(">", "_")
+            for column in dataframe.columns
+        ]
+        return dataframe
+    return clean(training_data), clean(testing_data)
+
+
+def main(args):
     """Main function to load data, train models, and save evaluation metrics."""
     # Set up logging
     setup_logging()
     logging.info("Starting script")
+    training_data_path=args.training_data_path
+    testing_data_path=args.testing_data_path
+    metrics_output_path=args.metrics_output_path
 
     # Load data
     logging.info("Loading training and test datasets")
-    training_data = pd.read_parquet(training_data_path)
-    testing_data = pd.read_parquet(testing_data_path)
-
+    training_data = pd.read_parquet(training_data_path).dropna()
+    testing_data = pd.read_parquet(testing_data_path).dropna()
+    
+    # Preprocess data together to ensure they have the same columns after encoding
+    training_data, testing_data = preprocess_combined_data(
+        training_data, 
+        testing_data, 
+        threshold=args.encoding_threshold
+        )
+    training_data, testing_data = clean_feature_names(training_data, testing_data)
+    if args.shots:
+        logging.info(f"Sampling {args.shots} shots from training data")
+        training_data = training_data.sample(n=args.shots, random_state=42)
+        metrics_output_path = metrics_output_path.replace(".json", f"{args.shots}_shots.json")
+        
+    logging.info(f"Training dataset shape: {training_data.shape}")
+    logging.info(f"Test dataset shape: {testing_data.shape}")
+    
     # Define feature columns (excluding the target column)
     feature_columns = [col for col in training_data.columns if col != LABEL]
 
     # Define models and their hyperparameter grids
     models_and_hyperparameter_grids = {
         "Logistic Regression": (
-            LogisticRegression(max_iter=1000, solver='liblinear'),
+            LogisticRegression(max_iter=5000),
             {
                 "C": [0.01, 0.1, 0.3, 1, 10],
                 "penalty": ["l1", "l2"],
-                "solver": ["saga"],
+                "solver": ["saga", 'liblinear'],
                 "n_jobs":[-1]
             }
         ),
@@ -192,7 +289,7 @@ def main(
             all_metrics.append(metrics)
         except Exception as error:
             logging.error(f"Error training {model_name}: {error}", exc_info=True)
-
+    
     # Save metrics to the output path
     logging.info(f"Saving metrics to {metrics_output_path}")
     with open(metrics_output_path, 'w') as output_file:
@@ -218,15 +315,26 @@ if __name__ == "__main__":
         help="Path to testing dataset in Parquet format"
     )
     parser.add_argument(
+        '--encoding_threshold', 
+        type=int, 
+        required=True, 
+        help="Threshold for using one-hot encoding, categorical \
+        columns that have unique values higher than this threshold \
+        will be encoded using lable encoder, otherwise one-hot"
+    )
+    parser.add_argument(
         '--metrics_output_path', 
         type=str, 
         required=True, 
         help="Path to save the evaluation metrics in JSON format"
     )
+    parser.add_argument(
+        '--shots', 
+        type=int, 
+        required=False, 
+        default=None,
+        help="n-shots to use for trainingm if e.g., 8 shots, experts are trained with 8 training samples"
+    )
     args = parser.parse_args()
 
-    main(
-        training_data_path=args.training_data_path, 
-        testing_data_path=args.testing_data_path, 
-        metrics_output_path=args.metrics_output_path
-    )
+    main(args)
