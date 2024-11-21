@@ -1,0 +1,73 @@
+[
+    {
+        "model": "Logistic Regression",
+        "accuracy": 0.8602941176470589,
+        "ROC_AUC": 0.9216794008460675,
+        "PR_AUC": 0.9819520895344609,
+        "F1_score": 0.9152626362735382,
+        "KS_score": 0.19117647058823528,
+        "num": 2448,
+        "best_hyperparameters": {
+            "C": 0.3,
+            "n_jobs": -1,
+            "penalty": "l1",
+            "solver": "liblinear"
+        }
+    },
+    {
+        "model": "Random Forest",
+        "accuracy": 0.869281045751634,
+        "ROC_AUC": 0.926192480359147,
+        "PR_AUC": 0.9828240261785793,
+        "F1_score": 0.9214531173294059,
+        "KS_score": 0.19117647058823528,
+        "num": 2448,
+        "best_hyperparameters": {
+            "max_depth": 20,
+            "min_samples_split": 10,
+            "n_estimators": 200
+        }
+    },
+    {
+        "model": "XGBoost",
+        "accuracy": 0.8259803921568627,
+        "ROC_AUC": 0.929444012777346,
+        "PR_AUC": 0.9833972187944664,
+        "F1_score": 0.9027841168416249,
+        "KS_score": 0.19117647058823528,
+        "num": 2448,
+        "best_hyperparameters": {
+            "learning_rate": 0.2,
+            "max_depth": 5,
+            "min_child_weight": 350,
+            "n_estimators": 200,
+            "scale_pos_weight": 10,
+            "subsample": 1.0
+        }
+    },
+    {
+        "model": "LightGBM",
+        "accuracy": 0.880718954248366,
+        "ROC_AUC": 0.939304368471035,
+        "PR_AUC": 0.9860009227670314,
+        "F1_score": 0.9266700150678051,
+        "KS_score": 0.19117647058823528,
+        "num": 2448,
+        "best_hyperparameters": {
+            "learning_rate": 0.05,
+            "min_child_samples": 10,
+            "n_estimators": 100,
+            "num_leaves": 31
+        }
+    },
+    {
+        "model": "Naive Bayes",
+        "accuracy": 0.7679738562091504,
+        "ROC_AUC": 0.8944336527669862,
+        "PR_AUC": 0.9748497679261436,
+        "F1_score": 0.836405529953917,
+        "KS_score": 0.19117647058823528,
+        "num": 2448,
+        "best_hyperparameters": {}
+    }
+]

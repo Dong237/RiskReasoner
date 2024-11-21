@@ -1,0 +1,73 @@
+[
+    {
+        "model": "Logistic Regression",
+        "accuracy": 0.748,
+        "ROC_AUC": 0.9115055266371056,
+        "PR_AUC": 0.9405012867214959,
+        "F1_score": 0.7951219512195122,
+        "KS_score": 0.7099961442066705,
+        "num": 1000,
+        "best_hyperparameters": {
+            "C": 0.3,
+            "n_jobs": -1,
+            "penalty": "l1",
+            "solver": "liblinear"
+        }
+    },
+    {
+        "model": "Random Forest",
+        "accuracy": 0.755,
+        "ROC_AUC": 0.9171888053467001,
+        "PR_AUC": 0.9430274210326031,
+        "F1_score": 0.8044692737430168,
+        "KS_score": 0.7189769295032452,
+        "num": 1000,
+        "best_hyperparameters": {
+            "max_depth": 20,
+            "min_samples_split": 10,
+            "n_estimators": 200
+        }
+    },
+    {
+        "model": "XGBoost",
+        "accuracy": 0.576,
+        "ROC_AUC": 0.9238279994858941,
+        "PR_AUC": 0.9457385373421441,
+        "F1_score": 0.7150537634408602,
+        "KS_score": 0.7074416811258917,
+        "num": 1000,
+        "best_hyperparameters": {
+            "learning_rate": 0.2,
+            "max_depth": 5,
+            "min_child_weight": 350,
+            "n_estimators": 200,
+            "scale_pos_weight": 10,
+            "subsample": 1.0
+        }
+    },
+    {
+        "model": "LightGBM",
+        "accuracy": 0.795,
+        "ROC_AUC": 0.9309371184371183,
+        "PR_AUC": 0.9525869651755676,
+        "F1_score": 0.8252344416027281,
+        "KS_score": 0.7517833044148834,
+        "num": 1000,
+        "best_hyperparameters": {
+            "learning_rate": 0.05,
+            "min_child_samples": 10,
+            "n_estimators": 100,
+            "num_leaves": 31
+        }
+    },
+    {
+        "model": "Naive Bayes",
+        "accuracy": 0.812,
+        "ROC_AUC": 0.8832939721097616,
+        "PR_AUC": 0.9182614987285797,
+        "F1_score": 0.803347280334728,
+        "KS_score": 0.6406079300816142,
+        "num": 1000,
+        "best_hyperparameters": {}
+    }
+]

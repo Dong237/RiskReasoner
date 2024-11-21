@@ -1,0 +1,10 @@
+{
+    "accuracy": NaN,
+    "F1_score": 0.0,
+    "ROC_AUC": 0.5012169847696164,
+    "PR_AUC": 0.45573491946461353,
+    "KS_score": 0.032709980078401125,
+    "miss_percentage": 1.0,
+    "num_valid": 0,
+    "num_total": 1000
+}

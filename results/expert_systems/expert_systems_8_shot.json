@@ -1,0 +1,73 @@
+[
+    {
+        "model": "Logistic Regression",
+        "accuracy": 0.578,
+        "ROC_AUC": 0.5513322569243622,
+        "PR_AUC": 0.5947149618806892,
+        "F1_score": 0.6596774193548387,
+        "KS_score": 0.14838377996272722,
+        "num": 1000,
+        "best_hyperparameters": {
+            "C": 1,
+            "n_jobs": -1,
+            "penalty": "l1",
+            "solver": "liblinear"
+        }
+    },
+    {
+        "model": "Random Forest",
+        "accuracy": 0.572,
+        "ROC_AUC": 0.5888338635049162,
+        "PR_AUC": 0.6300955837065816,
+        "F1_score": 0.5908221797323135,
+        "KS_score": 0.1603849367007262,
+        "num": 1000,
+        "best_hyperparameters": {
+            "max_depth": 5,
+            "min_samples_split": 5,
+            "n_estimators": 50
+        }
+    },
+    {
+        "model": "XGBoost",
+        "accuracy": 0.468,
+        "ROC_AUC": 0.5,
+        "PR_AUC": 0.766,
+        "F1_score": 0.0,
+        "KS_score": 0.0,
+        "num": 1000,
+        "best_hyperparameters": {
+            "learning_rate": 0.01,
+            "max_depth": 2,
+            "min_child_weight": 350,
+            "n_estimators": 50,
+            "scale_pos_weight": 1,
+            "subsample": 1.0
+        }
+    },
+    {
+        "model": "LightGBM",
+        "accuracy": 0.468,
+        "ROC_AUC": 0.5,
+        "PR_AUC": 0.766,
+        "F1_score": 0.0,
+        "KS_score": 0.0,
+        "num": 1000,
+        "best_hyperparameters": {
+            "learning_rate": 0.05,
+            "min_child_samples": 10,
+            "n_estimators": 50,
+            "num_leaves": 31
+        }
+    },
+    {
+        "model": "Naive Bayes",
+        "accuracy": 0.673,
+        "ROC_AUC": 0.773004225306857,
+        "PR_AUC": 0.8274437166072239,
+        "F1_score": 0.7321867321867321,
+        "KS_score": 0.48661718398560505,
+        "num": 1000,
+        "best_hyperparameters": {}
+    }
+]
