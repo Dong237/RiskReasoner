@@ -8,7 +8,8 @@ from sklearn.metrics import (
     precision_recall_curve, 
     auc, 
     f1_score, 
-    roc_curve
+    roc_curve,
+    accuracy_score
 )
 
 
@@ -92,7 +93,6 @@ def setup_logging():
     logger.addHandler(color_handler)
     
 
-## Evalution
 def compute_binary_metrics_from_results(results):
     """
     Compute evaluation metrics for binary classification using results from a JSON object.
@@ -100,37 +100,49 @@ def compute_binary_metrics_from_results(results):
     Args:
         results (list / json object): A list of dictionaries, where each dictionary contains:
             - 'id': ID of the record.
-            - 'pred_prob': List of two floats, [negative_prob, positive_prob].
+            - 'pred_prob': List of two floats, [good_prob, bad_prob].
+            - 'pred_label': Integer (0, 1) or "miss", the predicted label based on text generation.
             - 'label': Integer (0 or 1), the true label.
             - 'query': (Ignored in this implementation).
 
     Returns:
         dict: A dictionary containing evaluation metrics.
     """
-    # Step 1: Extract labels and predictions
+    # Extract relevant data from results
     labels = [item['label'] for item in results]
-    pos_probs = [item['pred_prob'][1] for item in results]  # Extract positive class probabilities
-    predictions = [1 if prob > 0.5 else 0 for prob in pos_probs]  # Threshold at 0.5 for binary prediction
+    pos_probs = [item['pred_prob'][1] for item in results]  # Extract probabilities for 'bad' (positive class)
+    pred_labels = [item['pred_label'] for item in results]
 
-    # Step 2: Compute metrics
-    accuracy = sum(1 for pred, label in zip(predictions, labels) if pred == label) / len(labels)
+    # Filter out "miss" entries for text prediction metrics
+    valid_indices = [i for i, label in enumerate(pred_labels) if label != "miss"]
+    filtered_pred_labels = [pred_labels[i] for i in valid_indices]
+    filtered_labels = [labels[i] for i in valid_indices]
+
+    # Compute metrics using probabilities (pred_probs)
     roc_auc = roc_auc_score(labels, pos_probs)
     precision, recall, _ = precision_recall_curve(labels, pos_probs)
     pr_auc = auc(recall, precision)
-    f1 = f1_score(labels, predictions)
-    
     # KS score calculation
     fpr, tpr, _ = roc_curve(labels, pos_probs)
     ks_score = max(abs(tpr - fpr))
 
-    # Step 3: Combine metrics into a dictionary
+    # Compute metrics using binary predictions (text_prediction_label)
+    accuracy = accuracy_score(filtered_labels, filtered_pred_labels)
+    f1 = f1_score(filtered_labels, filtered_pred_labels)
+
+    # Compute "miss" percentage
+    miss_percentage = pred_labels.count("miss") / len(pred_labels)
+
+    # Combine metrics into a dictionary
     metrics = {
         'accuracy': accuracy,
+        'F1_score': f1,
         'ROC_AUC': roc_auc,
         'PR_AUC': pr_auc,
-        'F1_score': f1,
-        'KS_score': ks_score,  # Add KS score to metrics
-        'num': len(labels)  # Number of evaluated instances
+        'KS_score': ks_score,
+        'miss_percentage': miss_percentage,
+        'num_valid': len(filtered_labels),  # Number of valid predictions
+        'num_total': len(labels)  # Total number of instances
     }
 
     return metrics
