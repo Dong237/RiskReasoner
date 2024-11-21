@@ -209,10 +209,10 @@ def main(args):
         threshold=args.encoding_threshold
         )
     training_data, testing_data = clean_feature_names(training_data, testing_data)
-    if args.shots:
-        logging.info(f"Sampling {args.shots} shots from training data")
-        training_data = training_data.sample(n=args.shots, random_state=42)
-        metrics_output_path = metrics_output_path.replace(".json", f"{args.shots}_shots.json")
+    if args.few_shot:
+        logging.info(f"Sampling {args.few_shot} shot from training data")
+        training_data = training_data.sample(n=args.few_shot, random_state=42)
+        metrics_output_path = metrics_output_path.replace(".json", f"_{args.few_shot}_shot.json")
         
     logging.info(f"Training dataset shape: {training_data.shape}")
     logging.info(f"Test dataset shape: {testing_data.shape}")
@@ -292,6 +292,7 @@ def main(args):
     
     # Save metrics to the output path
     logging.info(f"Saving metrics to {metrics_output_path}")
+    os.makedirs(os.path.dirname(metrics_output_path), exist_ok=True)
     with open(metrics_output_path, 'w') as output_file:
         json.dump(all_metrics, output_file, indent=4)
 
@@ -329,11 +330,11 @@ if __name__ == "__main__":
         help="Path to save the evaluation metrics in JSON format"
     )
     parser.add_argument(
-        '--shots', 
+        '--few_shot', 
         type=int, 
         required=False, 
         default=None,
-        help="n-shots to use for trainingm if e.g., 8 shots, experts are trained with 8 training samples"
+        help="n-shot to use for training if e.g., 8 shot, experts are trained with 8 training samples"
     )
     args = parser.parse_args()
 
