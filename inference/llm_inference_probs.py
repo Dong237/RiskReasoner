@@ -21,7 +21,7 @@ from utils import (
 )
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 
 SYSTEM_PROMPT = "You are a helpful assistant that classifies binary prompts into 'good' or 'bad'."
@@ -84,46 +84,6 @@ def _load_model_and_tokenizer(model_name_or_path, lora_weights=None):
     except Exception as e:
         logging.error(f"Failed to load model or tokenizer: {e}")
         raise
-    
-    
-# def _generate(model, tokenizer, prompt, choices):
-#     """
-#     Generate probabilities for 'good' and 'bad' tokens using logit masking.
-#     """
-#     try:
-#         # Encode the prompt into input IDs
-#         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
-
-#         # Get logits for the next token prediction
-#         with torch.no_grad():
-#             outputs = model(input_ids)
-#             logits = outputs.logits  # Shape: [batch_size, seq_len, vocab_size]
-
-#         # Get the logits for the last token in the sequence
-#         last_token_logits = logits[0, -1, :]  # Shape: [vocab_size]
-
-#         # Identify token IDs for "good" and "bad"
-#         good_token, bad_token = choices
-#         good_token_id = tokenizer.convert_tokens_to_ids(good_token)
-#         bad_token_id = tokenizer.convert_tokens_to_ids(bad_token)
-
-#         # Logit Masking: Mask out all other logits to have the final two probs sum to 1
-#         # TODO this is efficient but have certain level of risk of noise amplification
-#         # and loss of context, could consider using classification head when finetuning involed
-#         mask = torch.full_like(last_token_logits, float('-inf'))
-#         mask[good_token_id] = 0
-#         mask[bad_token_id] = 0
-#         masked_logits = last_token_logits + mask
-
-#         # Compute probabilities
-#         probabilities = torch.softmax(masked_logits, dim=-1)
-#         good_prob = probabilities[good_token_id].item()
-#         bad_prob = probabilities[bad_token_id].item()
-
-#         return [good_prob, bad_prob]
-#     except Exception as e:
-#         logging.error(f"Error during generation for prompt '{prompt}': {e}")
-#         raise
 
 
 def _generate(model, tokenizer, prompt, choices):
@@ -152,6 +112,9 @@ def _generate(model, tokenizer, prompt, choices):
         model.generation_config.top_p = None
         model.generation_config.top_k = None
 
+        #################################
+        ## Generate probs predictioin  ##
+        #################################
         # Get logits from the model
         # FIXME always keep in mind that the most probable token is 
         # not necessarily "good" or "bad", could be e.g., "GOOD" or other forms
@@ -181,7 +144,28 @@ def _generate(model, tokenizer, prompt, choices):
         probabilities = torch.softmax(masked_logits, dim=-1)
         good_prob = probabilities[good_token_id].item()
         bad_prob = probabilities[bad_token_id].item()
-        return [good_prob, bad_prob]
+        
+        ##############################
+        ## Generate text prediction ##
+        ##############################
+        generated_ids = model.generate(
+            **model_inputs,
+            do_sample=False,
+            max_new_tokens=512,
+        )
+        generated_ids = [
+            output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
+        ]
+        response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        text_prediction = response.strip().lower()
+        if text_prediction == good_token:
+            text_prediction_lable = 0 
+        elif text_prediction == bad_token:
+            text_prediction_lable = 1
+        else:
+            text_prediction_lable = "miss"
+        return [good_prob, bad_prob], text_prediction_lable
+    
     except Exception as e:
         logging.error(f"Error during generation for prompt '{prompt}': {e}")
         raise
@@ -227,12 +211,13 @@ def main():
             record_id = row["id"]
 
             # Generate probabilities
-            pred_prob = _generate(model, tokenizer, query, choices)
+            pred_prob, text_prediction_lable = _generate(model, tokenizer, query, choices)
 
             # Prepare the result dictionary
             result = {
                 "id": record_id,
                 "pred_prob": pred_prob,
+                "pred_label": text_prediction_lable,
                 "label": gold_label,
                 "query": query,
             }
