@@ -51,6 +51,8 @@ name = "accepted_2007_to_2018Q4.csv"
 feature_size = 21 + 1  # Target_index = -1
 train_size, dev_size, test_size = 0.7, 0.1, 0.2
 
+LABEL = "Loan Status"
+
 if train_size + dev_size + test_size != 1:
     print("sample size wrong!!!")
 
@@ -137,21 +139,66 @@ def save_expert_system_data(data, train_ind, dev_ind, test_ind):
     data = pd.DataFrame(data, columns=mean_list)
     df_train = data.iloc[train_ind]
     df_dev = data.iloc[dev_ind]
-    df_test = data.iloc[test_ind]
+    df_test = data.iloc[test_ind].dropna()  # Drop NaN for test data
+
     if not os.path.exists(data_folder/experts_data_folder):
         os.makedirs(data_folder/experts_data_folder)
+
     df_train.to_parquet(data_folder/experts_data_folder/"train_expert.parquet")
     df_dev.to_parquet(data_folder/experts_data_folder/"dev_expert.parquet")
     df_test.to_parquet(data_folder/experts_data_folder/"test_expert.parquet")
+
+    # Balanced sampling for test data
+    LABEL = 'Loan Status'  # Replace with the column name for the labels
+    df_test_balanced = balance_test_set(df_test, LABEL)
+    df_test_balanced.to_parquet(data_folder/experts_data_folder/"test_expert_balanced.parquet")
     print("Save expert system data done")
+    return df_test_balanced  # Return the balanced test data for further use
+
+
+def balance_test_set(df_test, label_column):
+    """
+    Balance the test set to have 1000 rows with an equal number of each class.
+    """
+    # Count unique values in the label column
+    counts = df_test[label_column].value_counts()
+    print("Test data label counts before balancing:", counts)
+
+    # Separate rows for each class
+    charged_off_rows = df_test[df_test[label_column] == "Charged Off"]
+    fully_paid_rows = df_test[df_test[label_column] == "Fully Paid"]
+
+    k = len(charged_off_rows)  # Number of rows with "Charged Off"
+    if k > 1000:
+        raise ValueError("Too many 'Charged Off' rows to create a balanced dataset.")
+
+    # Sample from the "Fully Paid" class to make up the rest
+    fully_paid_sample = fully_paid_rows.sample(1000 - k, random_state=10086)
+
+    # Combine the two sets
+    balanced_df = pd.concat([charged_off_rows, fully_paid_sample])
+    balanced_df = balanced_df.sample(frac=1, random_state=10086).reset_index(drop=True)  # Shuffle rows
+    print("Test data label counts after balancing:", balanced_df[label_column].value_counts())
+    return balanced_df
+
+
+def drop_nan(data, columns=mean_list):
+    """
+    Drop NaN values from data and return cleaned data as a list of lists.
+    """
+    df = pd.DataFrame(data, columns=columns)
+    df_clean = df.dropna()
+    return df_clean.values.tolist()
 
 
 #####process
 if __name__ == '__main__':
+    # Get data
     data = get_data(data_folder/name).values.tolist()
     check_num = get_num(data)
     random.seed(10086)
 
+    # Split data into train, dev, and test
     train_ind = random.sample([i for i in range(len(data))], int(len(data) * train_size))
     train_data = [data[i] for i in train_ind]
 
@@ -161,11 +208,18 @@ if __name__ == '__main__':
 
     test_ind = list(set(index_left) - set(dev_ind))
     test_data = [data[i] for i in test_ind]
-    
-    save_expert_system_data(data, train_ind, dev_ind, test_ind)
 
-    test_prompt_data = json_save(test_data, 'test')
+    # Drop NaN values from test data
+    test_data_clean = drop_nan(test_data, mean_list)
+
+    # Save expert system data and get balanced test data
+    test_data_balanced = save_expert_system_data(data, train_ind, dev_ind, test_ind)
+
+    # Use balanced test data for JSON saving
+    test_prompt_data = json_save(test_data_clean, 'test')
     train_prompt_data = json_save(train_data, 'train')
     dev_prompt_data = json_save(dev_data, 'valid')
+
+    # Save balanced test data for prompt-based system
+    test_prompt_data_balanced = json_save(test_data_balanced.values.tolist(), 'test_balanced')
     print("Save llms data done")
-    
