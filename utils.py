@@ -92,7 +92,91 @@ def setup_logging():
     logger.addHandler(file_handler)
     logger.addHandler(color_handler)
     
+    
+## Processing dataframes for fitting expert systems
+import pandas as pd
+from sklearn.preprocessing import LabelEncoder
+LABEL = "Loan Status"  # Global variable for the target column
+def preprocess_combined_data(train_data, test_data, threshold=5):
+    """
+    Preprocess training and testing datasets by concatenating them,
+    encoding categorical features, and then splitting them back.
+    
+    Parameters:
+        train_data (pd.DataFrame): Training dataset.
+        test_data (pd.DataFrame): Testing dataset.
+        threshold (int): Max unique values for one-hot encoding. Otherwise, label encoding is used.
+    
+    Returns:
+        pd.DataFrame, pd.DataFrame: Processed training and testing datasets.
+    """
+    # Add a temporary column to identify dataset type
+    train_data = train_data.copy()
+    test_data = test_data.copy()
+    
+    train_data['__dataset_type'] = 'train'
+    test_data['__dataset_type'] = 'test'
 
+    # Concatenate train and test datasets
+    combined_data = pd.concat([train_data, test_data], axis=0)
+
+    # Encode the target column (Loan Status) into binary values
+    if LABEL in combined_data:
+        combined_data[LABEL] = combined_data[LABEL].map({
+            'Fully Paid': 1,
+            'Charged Off': 0
+        })
+        if combined_data[LABEL].isnull().any():
+            raise ValueError(f"Unexpected values in {LABEL}. Ensure it only contains 'Fully Paid' or 'Charged Off'.")
+
+    # Encode categorical features
+    categorical_columns = [
+        column for column in combined_data.select_dtypes(include=['object']).columns.tolist()
+        if column != LABEL and column != '__dataset_type'  # Exclude the LABEL and __dataset_type columns
+    ]
+
+    for column in categorical_columns:
+        unique_values = combined_data[column].nunique()
+
+        if unique_values <= threshold:
+            # Apply one-hot encoding
+            one_hot = pd.get_dummies(
+                combined_data[column],
+                prefix=column,
+                drop_first=False  # Keep all categories
+            )
+            combined_data = pd.concat([combined_data, one_hot], axis=1)
+            combined_data.drop(column, axis=1, inplace=True)
+        else:
+            # Apply label encoding
+            label_encoder = LabelEncoder()
+            combined_data[column] = label_encoder.fit_transform(combined_data[column])
+
+    # Split back into train and test datasets
+    train_data_processed = combined_data[combined_data['__dataset_type'] == 'train'].drop('__dataset_type', axis=1)
+    test_data_processed = combined_data[combined_data['__dataset_type'] == 'test'].drop('__dataset_type', axis=1)
+
+    return train_data_processed, test_data_processed
+
+
+def clean_feature_names(training_data, testing_data):
+    """
+    Ensure all column names in the DataFrame are strings and free of invalid characters.
+    """
+    
+    def clean(dataframe):
+        dataframe.columns = [
+            str(column).replace("[", "_")
+                    .replace("]", "_")
+                    .replace("<", "_")
+                    .replace(">", "_")
+            for column in dataframe.columns
+        ]
+        return dataframe
+    return clean(training_data), clean(testing_data)
+
+    
+## Metrics
 def compute_binary_metrics_from_results(results):
     """
     Compute evaluation metrics for binary classification using results from a JSON object.
