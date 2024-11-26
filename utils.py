@@ -122,9 +122,10 @@ def preprocess_combined_data(train_data, test_data, threshold=5):
 
     # Encode the target column (Loan Status) into binary values
     if LABEL in combined_data:
+        # This encoding convention is from CALM work as in the prior.py
         combined_data[LABEL] = combined_data[LABEL].map({
-            'Fully Paid': 1,
-            'Charged Off': 0
+            'Fully Paid': 0,
+            'Charged Off': 1
         })
         if combined_data[LABEL].isnull().any():
             raise ValueError(f"Unexpected values in {LABEL}. Ensure it only contains 'Fully Paid' or 'Charged Off'.")
