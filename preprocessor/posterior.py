@@ -154,7 +154,7 @@ def create_llm_queries_with_predictions(data, model, model_name, X_train, y_trai
                      f"As reference, the predicted probability of this client's loan status being good given by the machine learning model "
                      f"{model_name} is {train_prob_good[i] * 100:.2f}%, and the probability of it being bad "
                      f"is {train_prob_bad[i] * 100:.2f}%. \nAnswer:",
-            "answer": "good" if y_train.iloc[i] == 1 else "bad",
+            "answer": "good" if y_train.iloc[i] == 0 else "bad",  # label 0 is encoded as "Fully Paid"
             "choices": ["good", "bad"],
             "gold": y_train.iloc[i],
             "text": create_text(X_train.iloc[i])
@@ -173,7 +173,7 @@ def create_llm_queries_with_predictions(data, model, model_name, X_train, y_trai
                      f"As reference, the predicted probability of this client's loan status being good given by the machine learning model "
                      f"{model_name} is {test_prob_good[i] * 100:.2f}%, and the probability of it being bad "
                      f"is {test_prob_bad[i] * 100:.2f}%. \nAnswer:",
-            "answer": "good" if y_test.iloc[i] == 1 else "bad",
+            "answer": "good" if y_test.iloc[i] == 0 else "bad",
             "choices": ["good", "bad"],
             "gold": y_test.iloc[i],
             "text": create_text(X_test.iloc[i])
@@ -199,6 +199,31 @@ def create_text(row):
         else:
             text += f"The {feature} is {value}. "
     return text
+
+
+def balance_test_set(df_test, label_column="gold"):
+    """
+    Balance the test set to have 1000 rows with an equal number of each class.
+    """
+    # Count unique values in the label column
+    counts = df_test[label_column].value_counts()
+    print("Test data label counts before balancing:", counts)
+
+    # Separate rows for each class
+    charged_off_rows = df_test[df_test[label_column] == 1]
+    fully_paid_rows = df_test[df_test[label_column] == 0]
+
+    k = len(charged_off_rows)  # Number of rows with "Charged Off"
+
+    # Sample from the "Fully Paid" class to make up the rest
+    fully_paid_sample = fully_paid_rows.sample(1000 - k, random_state=10086)
+
+    # Combine the two sets
+    balanced_df = pd.concat([charged_off_rows, fully_paid_sample])
+    balanced_df = balanced_df.sample(frac=1, random_state=10086).reset_index(drop=True)  # Shuffle rows
+    print("Test data label counts after balancing:", balanced_df[label_column].value_counts())
+    return balanced_df
+
 
 
 # Main function
@@ -253,15 +278,29 @@ def main():
 
     # Save the queries
     logging.info("Saving generated queries")
-    train_output_path = Path(args.data_path) / posterior_llm_folder  / "train_posterior.json"
-    test_output_path = Path(args.data_path) / posterior_llm_folder  / "test_posterior.json"
-    os.makedirs(train_output_path.parent, exist_ok=True)
+    train_output_json = Path(args.data_path) / posterior_llm_folder  / "train_posterior.json"
+    test_output_json = Path(args.data_path) / posterior_llm_folder  / "test_posterior.json"
+    
+    train_output_parquet = Path(args.data_path) / posterior_llm_folder  / "train_posterior.parquet"
+    test_output_parquet = Path(args.data_path) / posterior_llm_folder  / "test_posterior.parquet"
+    os.makedirs(train_output_json.parent, exist_ok=True)
+    
+    pd.DataFrame(train_queries).to_parquet(train_output_parquet, index=False)
+    pd.DataFrame(test_queries).to_parquet(test_output_parquet, index=False)
 
-    jdump(train_queries, train_output_path, indent=4)
-    jdump(test_queries, test_output_path, indent=4)
+    jdump(train_queries, train_output_json, indent=4)
+    jdump(test_queries, test_output_json, indent=4)
+    logging.info(f"Training completed. Queries saved to {train_output_json}, {test_output_json}, {train_output_parquet}, and {test_output_parquet}")
+    
+    # Save balanced test dataset
+    df_test_balanced = balance_test_set(pd.DataFrame(test_queries))
 
-    logging.info(f"Training completed. Queries saved to {train_output_path} and {test_output_path}")
+    test_balanced_output_json = Path(args.data_path) / posterior_llm_folder / "test_balanced_posterior.json"
+    test_balanced_output_parquet = Path(args.data_path) / posterior_llm_folder / "test_balanced_posterior.parquet"
 
+    df_test_balanced.to_parquet(test_balanced_output_parquet, index=False)
+    df_test_balanced.to_json(test_balanced_output_json, orient="records", indent=4)
 
+    
 if __name__ == "__main__":
     main()
