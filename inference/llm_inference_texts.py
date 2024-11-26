@@ -1,20 +1,28 @@
 import os
 import random
 import argparse
+import torch
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils import (
     jload, 
     jdump,
     setup_logging
 )
-from prompts import SYSTEM_PROMPT_TEST
 from peft import PeftModel
 import logging
 
+
+SYSTEM_PROMPT_TEST = """You are a risk management assistant who is good at credit scoring.
+You are given a text as description of a customer's credit report about his/her loan status below, and also the predicted loan status (probability) by a trained machine learning system.
+
+Please analyse step by step with every possible details. Give your reasoning process in steps and your assessment in the end. \n\n
+"""
 SEED = 42
 random.seed(SEED)
-os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 
 def _parse_args():
@@ -85,14 +93,15 @@ def _generate(prompt, model, tokenizer):
     model.generation_config.top_p=None
     model.generation_config.top_k=None
     
-    generated_ids = model.generate(
-        **model_inputs,
-        do_sample=False,
-        max_new_tokens=512,
-    )
-    generated_ids = [
-        output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
-    ]
+    with torch.no_grad():
+        generated_ids = model.generate(
+            **model_inputs,
+            do_sample=False,
+            max_new_tokens=2048,
+        )
+        generated_ids = [
+            output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
+        ]
     response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
     return response
 
@@ -112,16 +121,11 @@ def main():
     results = []
     for data in tqdm(test_dataset, desc="Getting response from the test dataset:"):
         response = _generate(
-            data["conversations"][0]["value"], 
+            data["query_cot"], 
             model, 
             tokenizer,
             )
-        result = {
-            "fact": data["fact"],
-            "question": data["conversations"][0]["value"],
-            "response": response,
-        }
-        results.append(result)
+        results.append(response)
     jdump(results, args.output_path)
     logging.info(f"Inference results saved as {args.output_path}")
 
