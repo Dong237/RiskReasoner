@@ -38,14 +38,22 @@ import random
 import numpy as np
 import pandas as pd
 from pathlib import Path
-import json
-
-#####config
 from sklearn.model_selection import train_test_split
 
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import jdump
+
+
+##### Config
 data_folder = Path("datasets")
-llm_data_folder = Path("llms")
-experts_data_folder = Path("experts")
+prior_folder = Path("prior")
+llm_data_folder = prior_folder / "llms"
+experts_data_folder = prior_folder / "experts"
+
+# Ensure directories exist
+llm_data_folder.mkdir(parents=True, exist_ok=True)
+experts_data_folder.mkdir(parents=True, exist_ok=True)
 
 name = "accepted_2007_to_2018Q4.csv"
 feature_size = 21 + 1  # Target_index = -1
@@ -89,23 +97,16 @@ def process_table(data, mean_list):
                 "query": f"{prompt}'{text}'" + ' \nAnswer:', 
                 'answer': answer, 
                 "choices": ["good", "bad"],
-                "gold": gold, 'text': text}
-            )
+                "gold": gold, 'text': text
+                }
+            )        
     return data_tmp
 
 
-def json_save(data, dataname, mean_list=mean_list, out_jsonl=False):
+def save_data(data, dataname, mean_list=mean_list):
     data_tmp = process_table(data, mean_list)
-    if out_jsonl:
-        with open('{}.jsonl'.format(data_folder/dataname), 'w') as f:
-            for i in data_tmp:
-                json.dump(i, f)
-                f.write('\n')
-            print('-----------')
-            print(f"{dataname}.jsonl write done")
-        f.close()
+    ## save as parquet files used in baseline establishment
     df = pd.DataFrame(data_tmp)
-    # 保存为 Parquet 文件
     parquet_file_path = data_folder / llm_data_folder / f'{dataname}.parquet'
     df.to_parquet(parquet_file_path, index=False)
     return data_tmp
@@ -216,10 +217,10 @@ if __name__ == '__main__':
     test_data_balanced = save_expert_system_data(data, train_ind, dev_ind, test_ind)
 
     # Use balanced test data for JSON saving
-    test_prompt_data = json_save(test_data_clean, 'test')
-    train_prompt_data = json_save(train_data, 'train')
-    dev_prompt_data = json_save(dev_data, 'valid')
+    test_prompt_data = save_data(test_data_clean, 'test')
+    train_prompt_data = save_data(train_data, 'train')
+    dev_prompt_data = save_data(dev_data, 'valid')
 
     # Save balanced test data for prompt-based system
-    test_prompt_data_balanced = json_save(test_data_balanced.values.tolist(), 'test_balanced')
+    test_prompt_data_balanced = save_data(test_data_balanced.values.tolist(), 'test_balanced')
     print("Save llms data done")
