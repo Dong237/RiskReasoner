@@ -128,10 +128,10 @@ def compute_binary_metrics(labels, pos_probs, pred_labels):
 # Function to create the modified queries for LLMs
 def create_llm_queries_with_predictions(data, model, model_name, X_train, y_train, X_test, y_test):
     # Get predictions (probabilities) from both train and test datasets
-    train_prob_bad = model.predict_proba(X_train)[:, 0]  # Probability of being bad (class 0)
-    test_prob_bad = model.predict_proba(X_test)[:, 0] 
-    train_prob_good = model.predict_proba(X_train)[:, 1]
-    test_prob_good = model.predict_proba(X_test)[:, 1]
+    train_prob_bad = model.predict_proba(X_train)[:, 1]  # Probability of being bad (class 0)
+    test_prob_bad = model.predict_proba(X_test)[:, 1] 
+    train_prob_good = model.predict_proba(X_train)[:, 0]
+    test_prob_good = model.predict_proba(X_test)[:, 0]
     train_pred = model.predict(X_train)
     test_pred = model.predict(X_test)
 
@@ -207,7 +207,6 @@ def balance_test_set(df_test, label_column="gold"):
     """
     # Count unique values in the label column
     counts = df_test[label_column].value_counts()
-    print("Test data label counts before balancing:", counts)
 
     # Separate rows for each class
     charged_off_rows = df_test[df_test[label_column] == 1]
@@ -221,9 +220,7 @@ def balance_test_set(df_test, label_column="gold"):
     # Combine the two sets
     balanced_df = pd.concat([charged_off_rows, fully_paid_sample])
     balanced_df = balanced_df.sample(frac=1, random_state=10086).reset_index(drop=True)  # Shuffle rows
-    print("Test data label counts after balancing:", balanced_df[label_column].value_counts())
     return balanced_df
-
 
 
 # Main function
