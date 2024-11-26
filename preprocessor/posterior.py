@@ -152,7 +152,8 @@ def create_llm_queries_with_predictions(data, model, model_name, X_train, y_trai
                      f"For instance, 'The client has a stable income, no previous debts, and owns a property.' "
                      f"should be classified as 'good'. \nText: " + create_text(X_train.iloc[i]) +
                      f"As reference, the predicted probability of this client's loan status being good given by the machine learning model "
-                     f"{model_name} is {train_prob_good[i] * 100:.2f}%, and the probability of it being bad is {train_prob_bad[i] * 100:.2f}%.",
+                     f"{model_name} is {train_prob_good[i] * 100:.2f}%, and the probability of it being bad "
+                     f"is {train_prob_bad[i] * 100:.2f}%. \nAnswer:",
             "answer": "good" if y_train.iloc[i] == 1 else "bad",
             "choices": ["good", "bad"],
             "gold": y_train.iloc[i],
@@ -170,7 +171,8 @@ def create_llm_queries_with_predictions(data, model, model_name, X_train, y_trai
                      f"For instance, 'The client has a stable income, no previous debts, and owns a property.' "
                      f"should be classified as 'good'. \nText: " + create_text(X_test.iloc[i]) +
                      f"As reference, the predicted probability of this client's loan status being good given by the machine learning model "
-                     f"{model_name} is {test_prob_good[i] * 100:.2f}%, and the probability of it being bad is {test_prob_bad[i] * 100:.2f}%.",
+                     f"{model_name} is {test_prob_good[i] * 100:.2f}%, and the probability of it being bad "
+                     f"is {test_prob_bad[i] * 100:.2f}%. \nAnswer:",
             "answer": "good" if y_test.iloc[i] == 1 else "bad",
             "choices": ["good", "bad"],
             "gold": y_test.iloc[i],
@@ -226,7 +228,6 @@ def main():
     logging.info("Loading datasets")
     data_path = Path(args.data_path)
     # Ensure posterior directory exists
-    (data_path / experts_data_folder).mkdir(parents=True, exist_ok=True)
     training_data = pd.read_parquet(data_path / experts_data_folder / "train_expert.parquet")
     testing_data = pd.read_parquet(data_path / experts_data_folder / "test_expert.parquet")
 
