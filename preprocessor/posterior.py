@@ -70,9 +70,6 @@ experts_data_folder = prior_folder / "experts"
 
 posterior_llm_folder = Path("posterior") # posterior data is only for llms, no need for subfolders
 
-# Ensure posterior directory exists
-posterior_llm_folder.mkdir(parents=True, exist_ok=True)
-
 LABEL = "Loan Status"
 
 # Function to select the best model based on the given metric
@@ -228,6 +225,8 @@ def main():
     # Load training and testing datasets
     logging.info("Loading datasets")
     data_path = Path(args.data_path)
+    # Ensure posterior directory exists
+    (data_path / experts_data_folder).mkdir(parents=True, exist_ok=True)
     training_data = pd.read_parquet(data_path / experts_data_folder / "train_expert.parquet")
     testing_data = pd.read_parquet(data_path / experts_data_folder / "test_expert.parquet")
 
