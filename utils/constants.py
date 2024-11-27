@@ -1,5 +1,8 @@
 from enum import Enum
 
+# NOTE the instructions written here are model-specific and sensitive to model changes
+# the three instructiosn are tested specifically on Qwen2.5-7B-Instruct and shown to be able to elicit
+# proper CoT rationales. In case of model changes, please test the instructions again and adapt.
 
 class Prompts(Enum):
     # System Prompts
@@ -11,11 +14,11 @@ class Prompts(Enum):
     INSTRUCTION_FREESTYLE = (
         "You are given a text as the description of a customer's credit report about "
         "his/her loan status, and also the predicted loan status (probability) by a "
-        "trained machine learning system.\n\n"
+        "trained machine learning system as reference (and reference only).\n\n"
         "Please analyse the given information and give your reasoning steps, also use your prior knowledge. "
         "Give your final answer in the end in this format: "
         "'My final assessment: [choose from \"good\" or \"bad\"]' "
-        "(Make sure you use lower case).\n"
+        "(Make sure you use lower case and do NOT add any other texts or symbols (e.g., **) after the word \"good\" or \"bad\").\n"
     )
 
     INSTRUCTION_REGULARIZED = (
@@ -23,7 +26,9 @@ class Prompts(Enum):
         "his/her loan status, and also the predicted loan status (probability) by a "
         "trained machine learning system.\n\n"
         "Please analyse the given information and give your reasoning steps, also use your prior knowledge. "
-        "You may follow these steps below and give your final answer in the end by saying 'My final assessment:'.\n\n"
+        "The following steps below can be used as an example, but I encourage you to be flexible and analyse "
+        "using different logical steps depending on the specific problem, "
+        "and give your final answer in the end by saying 'My final assessment:'.\n\n"
         "### Steps for Assessing Loan Status\n\n"
         "1. **Understand the Objective**: Approach the task methodically, ensuring all relevant factors are considered "
         "before making a decision.\n"
@@ -33,5 +38,26 @@ class Prompts(Enum):
         "5. **Review Supporting Factors**: Consider additional evidence that provides further confidence or raises concerns.\n"
         "6. **Integrate External Insights**: Leverage external predictions or tools to complement your evaluation.\n"
         "7. **Make a Decision**: Combine all insights to arrive at a clear and reasoned classification of \"good\" or \"bad\". "
-        "Give your decision in this format: 'My final assessment: [choose from \"good\" or \"bad\"]' (Make sure you use lower case).\n"
+        "Give your decision in this format: 'My final assessment: [choose from \"good\" or \"bad\"]' "
+        "(Make sure you use lower case and do NOT add any other texts or symbols after the word \"good\" or \"bad\").\n"
+    )
+
+    INSTRUCTION_STEP_BY_STEP = (
+        "You are given a text describing a customer's credit report and predicted loan status (probabilities) "
+        "from a trained machine learning system as reference (and reference only).\n\n"
+        "Please analyze the provided information STEP BY STEP following these instructions:\n"
+        "1. **During reasoning process**: For each piece of data, evaluate its significance "
+        "to the customer's creditworthiness. Then use your prior knowledge to interpret the data "
+        "and consider how each factor impacts the final credit risk assessment.\n"
+        "2. **When presenting your reasoning steps**:\n"
+        "    - Analyse each attribute from the report, discuss its importance, and determine whether it positively "
+        "or negatively affects the loan status.\n"
+        "    - Combine all factors to form a holistic assessment, taking into account the prediction probabilities "
+        "provided by the machine learning model.\n"
+        "3. **In the end of your output**: after presenting the reasoning steps, give your final answer in the following "
+        "format: 'Final assessment: [choose from \"good\" or \"bad\"]'. "
+        "End you output with one of the assessment token, this means that your last output token can only be either "
+        "\"good\" or \"bad\", not any other texts or symbols. "
+        "For example: don't use **Final Assessment: good**, instead just say Final assessment: good (without '**').\n\n"
+        "Here is the customer's credit report:\n"
     )
