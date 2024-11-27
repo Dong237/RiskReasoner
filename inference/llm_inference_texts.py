@@ -2,28 +2,34 @@ import os
 import random
 import argparse
 import torch
+import logging
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import (
+from utils.helper import (
     jload, 
     jdump,
     setup_logging
 )
+from utils.constants import Prompts
 from peft import PeftModel
-import logging
+from accelerate import (
+    init_empty_weights,
+    infer_auto_device_map, 
+    load_checkpoint_and_dispatch
+    )
 
 
-SYSTEM_PROMPT_TEST = """You are a risk management assistant who is good at credit scoring.
-You are given a text as description of a customer's credit report about his/her loan status below, and also the predicted loan status (probability) by a trained machine learning system.
+SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING.value
+# INSTRUCTION = Prompts.INSTRUCTION_FREESTYLE.value
+# INSTRUCTION = Prompts.INSTRUCTION_REGULARIZED.value
+INSTRUCTION = Prompts.INSTRUCTION_STEP_BY_STEP.value
 
-Please analyse step by step with every possible details. Give your reasoning process in steps and your assessment in the end. \n\n
-"""
 SEED = 42
 random.seed(SEED)
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
-
+os.environ["CUDA_VISIBLE_DEVICES"] = "2, 3"
+MAX_MEMORY = {0: "64GiB", 1: "64GiB"}  # Adjust based on your setup
 
 def _parse_args():
     # TODO add generation configuration 
@@ -56,16 +62,58 @@ def _parse_args():
     return parser.parse_args()
 
 
+# def _load_model_and_tokenizer(model_name_or_path, lora_weights=None):
+#     model = AutoModelForCausalLM.from_pretrained(
+#         model_name_or_path,
+#         torch_dtype="auto",
+#         device_map="cuda"
+#     )
+#     if lora_weights:
+#         logging.info(f"Loading LoRA weights from {lora_weights}")
+#         model = PeftModel.from_pretrained(model, lora_weights) 
+#     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+#     return model, tokenizer
+
+
 def _load_model_and_tokenizer(model_name_or_path, lora_weights=None):
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name_or_path,
-        torch_dtype="auto",
-        device_map="cuda"
-    )
+    """
+    Load the model and tokenizer, optimized for multi-GPU using the Accelerate library.
+    """
+    # Load the model with an empty initialization to prepare for dispatch
+    logging.info(f"Loading model from {model_name_or_path}...")
+    with init_empty_weights():
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name_or_path,
+            torch_dtype="auto"  # Automatically determines the best precision
+        )
+    
+    # Optionally load LoRA weights for fine-tuning
     if lora_weights:
         logging.info(f"Loading LoRA weights from {lora_weights}")
-        model = PeftModel.from_pretrained(model, lora_weights) 
+        model = PeftModel.from_pretrained(model, lora_weights)
+
+    # Automatically infer the device map for optimal multi-GPU partitioning
+    device_map = infer_auto_device_map(
+        model,
+        max_memory=MAX_MEMORY  # Adjust based on your setup
+    )
+    logging.info(f"Using device map: {device_map}")
+
+    # Dispatch the model to the appropriate devices based on the inferred device map
+    model = load_checkpoint_and_dispatch(
+        model,
+        checkpoint=model_name_or_path,
+        # device_map=device_map,
+        device_map="balanced",
+        no_split_module_classes=["Qwen2DecoderLayer"]  # Customize for your model type
+    )
+
+    # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+    tokenizer.padding_side = "left"  # Ensure compatibility with causal LM
+    tokenizer.truncation_side = "right"
+
+    logging.info("Model and tokenizer successfully loaded and dispatched.")
     return model, tokenizer
 
 
@@ -74,7 +122,7 @@ def _generate(prompt, model, tokenizer):
     messages = [
         {
             "role": "system", 
-            "content": SYSTEM_PROMPT_TEST
+            "content": SYSTEM_PROMPT
             },
         {
             "role": "user", 
@@ -88,16 +136,17 @@ def _generate(prompt, model, tokenizer):
     )
     model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
-    # make to use greedy decoding
-    model.generation_config.temperature=None
-    model.generation_config.top_p=None
-    model.generation_config.top_k=None
+    # # make to use greedy decoding
+    # model.generation_config.temperature=None
+    # model.generation_config.top_p=None
+    # model.generation_config.top_k=None
     
     with torch.no_grad():
         generated_ids = model.generate(
             **model_inputs,
-            do_sample=False,
+            do_sample=True,
             max_new_tokens=2048,
+            temperature=1,
         )
         generated_ids = [
             output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
@@ -121,7 +170,7 @@ def main():
     results = []
     for data in tqdm(test_dataset, desc="Getting response from the test dataset:"):
         response = _generate(
-            data["query_cot"], 
+            INSTRUCTION+data["query_cot"], 
             model, 
             tokenizer,
             )
