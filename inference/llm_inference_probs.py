@@ -19,9 +19,9 @@ from utils.helper import (
     setup_logging, 
     compute_binary_metrics_from_results
 )
+from utils.constants import Prompts
 
-
-SYSTEM_PROMPT = "You are a helpful assistant that classifies binary prompts into 'good' or 'bad'."
+SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING
 
 
 @dataclass
@@ -250,29 +250,26 @@ def main():
         examples = _generate_few_shot_examples(data_to_sample_from, args.few_shot)
     
     for _, row in tqdm(data.iterrows(), total=len(data), desc="Processing rows"):
-        try:
-            query = row["query"]
-            choices = row["choices"] 
-            gold_label = row["gold"]
-            record_id = row["id"]
-            
-            # Add few shot examples if specified
-            query = examples + query if args.few_shot else query
+        query = row["query"]
+        choices = row["choices"] 
+        gold_label = row["gold"]
+        record_id = row["id"]
+        
+        # Add few shot examples if specified
+        query = examples + query if args.few_shot else query
 
-            # Generate probabilities
-            pred_prob, text_prediction_lable = _generate(model, tokenizer, query, choices)
+        # Generate probabilities
+        pred_prob, text_prediction_lable = _generate(model, tokenizer, query, choices)
 
-            # Prepare the result dictionary
-            result = {
-                "id": record_id,
-                "pred_prob": pred_prob,
-                "pred_label": text_prediction_lable,
-                "label": gold_label,
-                "query": query,
-            }
-            results.append(result)
-        except Exception as e:
-            logging.error(f"Error processing row with id {row.get('id', 'unknown')}: {e}")
+        # Prepare the result dictionary
+        result = {
+            "id": record_id,
+            "pred_prob": pred_prob,
+            "pred_label": text_prediction_lable,
+            "label": gold_label,
+            "query": query,
+        }
+        results.append(result)
 
     # Adjust the output paths based on the model type
     if args.lora_weights:
