@@ -22,7 +22,7 @@ from tqdm import tqdm
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import (
+from utils.helper import (
     setup_logging,
     preprocess_combined_data,
     clean_feature_names

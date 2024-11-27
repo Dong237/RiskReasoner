@@ -42,7 +42,7 @@ from sklearn.model_selection import train_test_split
 
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import jdump
+from utils.helper import jdump
 
 
 ##### Config

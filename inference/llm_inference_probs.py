@@ -14,7 +14,7 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils import (
+from utils.helper import (
     jdump, 
     setup_logging, 
     compute_binary_metrics_from_results
