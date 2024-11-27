@@ -109,6 +109,9 @@ def save_data(data, dataname, mean_list=mean_list):
     df = pd.DataFrame(data_tmp)
     parquet_file_path = data_folder / llm_data_folder / f'{dataname}.parquet'
     df.to_parquet(parquet_file_path, index=False)
+    ## Save as json files used in baseline establishment
+    json_file_path = data_folder / llm_data_folder / f'{dataname}.json'
+    df.to_json(json_file_path, orient='records', indent=4)
     return data_tmp
 
 
