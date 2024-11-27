@@ -126,7 +126,16 @@ def compute_binary_metrics(labels, pos_probs, pred_labels):
 
 
 # Function to create the modified queries for LLMs
-def create_llm_queries_with_predictions(data, model, model_name, X_train, y_train, X_test, y_test):
+def create_llm_queries_with_predictions(
+    model, 
+    model_name, 
+    X_train, 
+    y_train, 
+    X_test, 
+    y_test, 
+    training_data, 
+    testing_data
+    ):
     # Get predictions (probabilities) from both train and test datasets
     train_prob_bad = model.predict_proba(X_train)[:, 1]  # Probability of being bad (class 0)
     test_prob_bad = model.predict_proba(X_test)[:, 1] 
@@ -134,6 +143,9 @@ def create_llm_queries_with_predictions(data, model, model_name, X_train, y_trai
     test_prob_good = model.predict_proba(X_test)[:, 0]
     train_pred = model.predict(X_train)
     test_pred = model.predict(X_test)
+    
+    training_data = training_data.drop(columns=[LABEL])
+    testing_data = testing_data.drop(columns=[LABEL])
 
     # Log metrics
     train_metrics = compute_binary_metrics(y_train, train_prob_good, train_pred)
@@ -144,47 +156,47 @@ def create_llm_queries_with_predictions(data, model, model_name, X_train, y_trai
 
     # Prepare the queries for the training dataset
     train_queries = []
-    for i in range(len(X_train)):
+    for i in range(len(training_data)):
         query = {
             "id": i,
             "query": f"Assess the client's loan status based on the following loan records from Lending Club. "
                      f"Respond with only 'good' or 'bad', and do not provide any additional information. "
                      f"For instance, 'The client has a stable income, no previous debts, and owns a property.' "
-                     f"should be classified as 'good'. \nText: " + create_text(X_train.iloc[i]) +
+                     f"should be classified as 'good'. \nText: " + create_text(training_data.iloc[i]) +
                      f"As reference, the predicted probability of this client's loan status being good given by the machine learning model "
                      f"{model_name} is {train_prob_good[i] * 100:.2f}%, and the probability of it being bad "
                      f"is {train_prob_bad[i] * 100:.2f}%. \nAnswer:",
-            "query_cot": f"Text: " + create_text(X_train.iloc[i]) + 
+            "query_cot": f"Text: " + create_text(training_data.iloc[i]) + 
                          f"As reference, the predicted probability of this client's loan status being good given by the machine learning model "
                          f"{model_name} is {train_prob_good[i] * 100:.2f}%, and the probability of it being bad "
                          f"is {train_prob_bad[i] * 100:.2f}%. \nAnswer:",
             "answer": "good" if y_train.iloc[i] == 0 else "bad",  # label 0 is encoded as "Fully Paid"
             "choices": ["good", "bad"],
             "gold": y_train.iloc[i],
-            "text": create_text(X_train.iloc[i])
+            "text": create_text(training_data.iloc[i])
         }
         train_queries.append(query)
 
     # Prepare the queries for the testing dataset
     test_queries = []
-    for i in range(len(X_test)):
+    for i in range(len(testing_data)):
         query = {
             "id": i,
             "query": f"Assess the client's loan status based on the following loan records from Lending Club. "
                      f"Respond with only 'good' or 'bad', and do not provide any additional information. "
                      f"For instance, 'The client has a stable income, no previous debts, and owns a property.' "
-                     f"should be classified as 'good'. \nText: " + create_text(X_test.iloc[i]) +
+                     f"should be classified as 'good'. \nText: " + create_text(testing_data.iloc[i]) +
                      f"As reference, the predicted probability of this client's loan status being good given by the machine learning model "
                      f"{model_name} is {test_prob_good[i] * 100:.2f}%, and the probability of it being bad "
                      f"is {test_prob_bad[i] * 100:.2f}%. \nAnswer:",
-            "query_cot": f"Text: " + create_text(X_test.iloc[i]) +
+            "query_cot": f"Text: " + create_text(testing_data.iloc[i]) +
                          f"As reference, the predicted probability of this client's loan status being good given by the machine learning model "
                          f"{model_name} is {test_prob_good[i] * 100:.2f}%, and the probability of it being bad "
                          f"is {test_prob_bad[i] * 100:.2f}%. \nAnswer:",
             "answer": "good" if y_test.iloc[i] == 0 else "bad",
             "choices": ["good", "bad"],
             "gold": y_test.iloc[i],
-            "text": create_text(X_test.iloc[i])
+            "text": create_text(testing_data.iloc[i])
         }
         test_queries.append(query)
 
@@ -213,9 +225,6 @@ def balance_test_set(df_test, label_column="gold"):
     """
     Balance the test set to have 1000 rows with an equal number of each class.
     """
-    # Count unique values in the label column
-    counts = df_test[label_column].value_counts()
-
     # Separate rows for each class
     charged_off_rows = df_test[df_test[label_column] == 1]
     fully_paid_rows = df_test[df_test[label_column] == 0]
@@ -263,15 +272,15 @@ def main():
 
     # Preprocess and clean data
     logging.info("Preprocessing datasets")
-    training_data, testing_data = preprocess_combined_data(training_data, testing_data, threshold=args.encoding_threshold)
-    training_data, testing_data = clean_feature_names(training_data, testing_data)
+    training_data_processed, testing_data_processed = preprocess_combined_data(training_data, testing_data, threshold=args.encoding_threshold)
+    training_data_cleaned, testing_data_cleaned = clean_feature_names(training_data_processed, testing_data_processed)
 
     # Split the target variable from features
-    y_train = training_data[LABEL]
-    X_train = training_data.drop(columns=[LABEL])
+    y_train = training_data_cleaned[LABEL]
+    X_train = training_data_cleaned.drop(columns=[LABEL])
 
-    y_test = testing_data[LABEL]
-    X_test = testing_data.drop(columns=[LABEL])
+    y_test = testing_data_cleaned[LABEL]
+    X_test = testing_data_cleaned.drop(columns=[LABEL])
 
     # Train the best model
     logging.info("Training the best model")
@@ -279,7 +288,10 @@ def main():
 
     # Generate queries for LLMs and log metrics
     logging.info("Generating queries and calculating metrics")
-    train_queries, test_queries = create_llm_queries_with_predictions(X_train, model, model_name, X_train, y_train, X_test, y_test)
+    train_queries, test_queries = create_llm_queries_with_predictions(
+        model, model_name, X_train, y_train, X_test, y_test,
+        training_data, testing_data
+        )
 
     # Save the queries
     logging.info("Saving generated queries")
