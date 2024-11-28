@@ -6,6 +6,7 @@ process to multi-GPU inference usign ``accelerate``.
 
 import random
 import torch
+torch.cuda.empty_cache()
 import logging
 import pandas as pd
 from tqdm import tqdm
