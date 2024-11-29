@@ -1,6 +1,13 @@
+"""
+This script samples a balanced subset (half correct, half incorrect) of 
+train.parquet (9k+ data) based on the predicted label from the LLM, results
+in about 1.7K+ data in the end. The data further servere for OmegaPRM data 
+generation
+"""
+
 import os
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from utils.helper import jload
 
 import json
@@ -9,15 +16,10 @@ from sklearn.utils import shuffle
 
 
 # Global variables for file paths
-INFERENCE_RESULTS = 'your_file.json'
-TRAINING_DATA = 'train.parquet'
-SAVE_PATH = 'train_sampled.parquet'
-
-
-def jload(file_path):
-    """Load JSON data from the given file path."""
-    with open(file_path, 'r') as f:
-        return json.load(f)
+INFERENCE_RESULTS = 'results/posterior/inference/Qwen2.5-7B-Instruct_train_posterior_cot.json'
+TRAINING_DATA = 'datasets/posterior/train_posterior.parquet'
+SAVE_PATH_PARQUET = 'datasets/posterior/train_posterior_sampled.parquet'
+SAVE_PATH_JSON = 'datasets/posterior/train_posterior_sampled.json'
 
 
 def compare_labels_and_store_ids(json_data):
@@ -26,11 +28,17 @@ def compare_labels_and_store_ids(json_data):
     ids_correct = []
 
     for entry in json_data:
-        if entry['pred_label'] == entry['label']:
+        if entry['pred_label'] == "miss":
+            # count miss as correct instrad of incorrect
             ids_correct.append(entry['id'])
+            continue
+        pred_label = int(entry['pred_label'])
+        label = int(entry['label'])
+        row_id = int(entry['id'])
+        if pred_label == label:
+            ids_correct.append(row_id)
         else:
-            ids_incorrect.append(entry['id'])
-    
+            ids_incorrect.append(row_id)
     return ids_incorrect, ids_correct
 
 
@@ -67,10 +75,9 @@ def main():
     final_df = process_and_shuffle_data(train_correct_sampled, train_incorrect)
     
     # Step 7: Save the final dataframe to a new parquet file
-    final_df.to_parquet(SAVE_PATH, index=False)
-    
-    # Output the final dataframe
-    return final_df
+    final_df.to_parquet(SAVE_PATH_PARQUET, index=False)
+    final_df.to_json(SAVE_PATH_JSON, orient='records', indent=4)
+    print(f"Data saved to {SAVE_PATH_PARQUET} and {SAVE_PATH_JSON}")
 
 
 if __name__ == '__main__':
