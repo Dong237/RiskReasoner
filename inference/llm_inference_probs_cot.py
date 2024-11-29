@@ -40,6 +40,7 @@ MAX_MEMORY = {0: "64GiB", 1: "64GiB"}  # Adjust based on your setup
 
 SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING.value
 INSTRUCTION = Prompts.INSTRUCTION_STEP_BY_STEP.value
+BATCH_SIZE = 32
 
 
 @dataclass
@@ -91,70 +92,99 @@ class Arguments:
     )
 
 
+# def _load_model_and_tokenizer(model_name_or_path, lora_weights=None):
+#     """
+#     Load the model and tokenizer, optimized for multi-GPU using the Accelerate library.
+#     """
+#     # Load the model with an empty initialization to prepare for dispatch
+#     logging.info(f"Loading model from {model_name_or_path}...")
+#     with init_empty_weights():
+#         model = AutoModelForCausalLM.from_pretrained(
+#             model_name_or_path,
+#             torch_dtype="auto"  # Automatically determines the best precision
+#         )
+    
+#     # Optionally load LoRA weights for fine-tuning
+#     if lora_weights:
+#         logging.info(f"Loading LoRA weights from {lora_weights}")
+#         model = PeftModel.from_pretrained(model, lora_weights)
+
+#     # Automatically infer the device map for optimal multi-GPU partitioning
+#     device_map = infer_auto_device_map(
+#         model,
+#         max_memory=MAX_MEMORY  # Adjust based on your setup
+#     )
+#     logging.info(f"Using device map: {device_map}")
+
+#     # Dispatch the model to the appropriate devices based on the inferred device map
+#     model = load_checkpoint_and_dispatch(
+#         model,
+#         checkpoint=model_name_or_path,
+#         # device_map=device_map,
+#         device_map="balanced",
+#         no_split_module_classes=["Qwen2DecoderLayer"]  # Customize for your model type
+#     )
+
+#     # Load tokenizer
+#     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+#     tokenizer.padding_side = "left"  # Ensure compatibility with causal LM
+#     tokenizer.truncation_side = "right"
+
+#     logging.info("Model and tokenizer successfully loaded and dispatched.")
+#     return model, tokenizer
+
+
 def _load_model_and_tokenizer(model_name_or_path, lora_weights=None):
     """
-    Load the model and tokenizer, optimized for multi-GPU using the Accelerate library.
-    """
-    # Load the model with an empty initialization to prepare for dispatch
-    logging.info(f"Loading model from {model_name_or_path}...")
-    with init_empty_weights():
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name_or_path,
-            torch_dtype="auto"  # Automatically determines the best precision
-        )
-    
-    # Optionally load LoRA weights for fine-tuning
-    if lora_weights:
-        logging.info(f"Loading LoRA weights from {lora_weights}")
-        model = PeftModel.from_pretrained(model, lora_weights)
-
-    # Automatically infer the device map for optimal multi-GPU partitioning
-    device_map = infer_auto_device_map(
-        model,
-        max_memory=MAX_MEMORY  # Adjust based on your setup
-    )
-    logging.info(f"Using device map: {device_map}")
-
-    # Dispatch the model to the appropriate devices based on the inferred device map
-    model = load_checkpoint_and_dispatch(
-        model,
-        checkpoint=model_name_or_path,
-        # device_map=device_map,
-        device_map="balanced",
-        no_split_module_classes=["Qwen2DecoderLayer"]  # Customize for your model type
-    )
-
-    # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
-    tokenizer.padding_side = "left"  # Ensure compatibility with causal LM
-    tokenizer.truncation_side = "right"
-
-    logging.info("Model and tokenizer successfully loaded and dispatched.")
-    return model, tokenizer
-
-
-def _generate(model, tokenizer, prompt, choices):
-    """
-    Generate a classification output for the prompt, returning probabilities
-    for 'good' and 'bad' tokens.
+    Load the model and tokenizer from the specified path, optionally loading LoRA weights.
     """
     try:
+        logging.info("Loading model and tokenizer...")
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name_or_path,
+            torch_dtype="auto",
+            device_map="cuda"
+        )
+        if lora_weights:
+            logging.info(f"Loading LoRA weights from {lora_weights}")
+            model = PeftModel.from_pretrained(model, lora_weights) 
+        tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        logging.info("Model and tokenizer loaded successfully.")
+        return model, tokenizer
+    except Exception as e:
+        logging.error(f"Failed to load model or tokenizer: {e}")
+        raise
+    
 
-        # Prepare the messages for input
+def _generate(model, tokenizer, prompts, choices):
+    """
+    Generate classification output for a batch of prompts, returning probabilities
+    for 'good' and 'bad' tokens in batches.
+    """
+    try:
+        # Prepare the messages for input using the chat template for each prompt
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
+            [
+                {"role": "system", "content": SYSTEM_PROMPT},  # Common system message
+                {"role": "user", "content": prompt}  # User's input prompt
+            ]
+            for prompt in prompts
         ]
-
-        # Prepare the text input for the model
-        text = tokenizer.apply_chat_template(
+        
+        # Apply the chat template for each prompt
+        text_inputs = tokenizer.apply_chat_template(
             messages,
             tokenize=False,
             add_generation_prompt=True,
         )
-        model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
-        # Configure generation settings for deterministic decoding
+        # Tokenize all prompts at once
+        model_inputs = tokenizer(
+            text_inputs, return_tensors="pt", padding=True, truncation=True
+            ).to(model.device)
+
+        # Configure generation settings
         model.generation_config.temperature = None
         model.generation_config.top_p = None
         model.generation_config.top_k = None
@@ -167,31 +197,29 @@ def _generate(model, tokenizer, prompt, choices):
         # not necessarily "good" or "bad", could be e.g., "GOOD" or other forms
         # in this case (weak instruction-following ability e.g, chat-version) 
         # this binary approach will fail
+        # Get logits from the model for the entire batch
         with torch.no_grad():
             outputs = model(**model_inputs)
             logits = outputs.logits
 
-        # Identify token IDs for "good" and "bad"
-        good_token, bad_token = choices
+        good_token, bad_token = choices[0]
         good_token_id = tokenizer.convert_tokens_to_ids(good_token)
         bad_token_id = tokenizer.convert_tokens_to_ids(bad_token)
 
-        # Extract probabilities for "good" and "bad" from the logits
-        last_token_logits = logits[0, -1, :]  # Get logits for the last token
+        # Extract probabilities for "good" and "bad" from the logits (for each prompt in the batch)
+        last_token_logits = logits[:, -1, :]  # Get logits for the last token in each sequence
 
-        # Logit Masking: Mask out all other logits to have the final two probs sum to 1
-        # TODO this is efficient but have certain level of risk of noise amplification
-        # and loss of context, could consider using classification head when finetuning involed
+        # Logit Masking for "good" and "bad"
         mask = torch.full_like(last_token_logits, float('-inf'))
-        mask[good_token_id] = 0
-        mask[bad_token_id] = 0
+        mask[:, good_token_id] = 0
+        mask[:, bad_token_id] = 0
         masked_logits = last_token_logits + mask
 
-        # Compute probabilities
+        # Compute probabilities for each prompt
         probabilities = torch.softmax(masked_logits, dim=-1)
-        good_prob = probabilities[good_token_id].item()
-        bad_prob = probabilities[bad_token_id].item()
-        
+        good_probs = probabilities[:, good_token_id].cpu().numpy()
+        bad_probs = probabilities[:, bad_token_id].cpu().numpy()
+
         ##############################
         ## Generate text prediction ##
         ##############################
@@ -199,24 +227,31 @@ def _generate(model, tokenizer, prompt, choices):
             generated_ids = model.generate(
                 **model_inputs,
                 do_sample=False,
-                max_new_tokens=4096,
+                max_new_tokens=2048,
             )
             generated_ids = [
                 output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
             ]
-            response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        text_prediction = response.split("\n\n")[-1].strip().lower()
-        if good_token in text_prediction:
-            text_prediction_lable = 0 
-        elif bad_token in text_prediction:
-            text_prediction_lable = 1
-        else:
-            text_prediction_lable = "miss"
-        return [good_prob, bad_prob], text_prediction_lable
+            responses = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+
+        # Post-processing the predictions
+        predictions = []
+        for i, response in enumerate(responses):
+            text_prediction = response.split("\n\n")[-1].strip().lower()
+            if good_token in text_prediction:
+                text_prediction_label = 0
+            elif bad_token in text_prediction:
+                text_prediction_label = 1
+            else:
+                text_prediction_label = "miss"
+            predictions.append((good_probs[i], bad_probs[i], text_prediction_label))
+
+        return predictions  # Return a list of tuples: (good_prob, bad_prob, text_prediction_label)
     
     except Exception as e:
-        logging.error(f"Error during generation for prompt '{prompt}': {e}")
+        logging.error(f"Error during batch generation: {e}")
         raise
+
 
 
 def _generate_few_shot_examples(dataframe, n):
@@ -252,7 +287,7 @@ def main():
     # Set up logging
     setup_logging()
 
-    # Parse arguments using HfArgumentParser
+    # Parse arguments
     parser = HfArgumentParser(Arguments)
     args = parser.parse_args_into_dataclasses()[0]
 
@@ -276,63 +311,56 @@ def main():
         return
 
     # Prepare results list
-    results = []
+    results = []    
 
-    # Iterate over each row in the dataset with a progress bar
-    logging.info("Starting inference...")
-    
-    # FIXME for CoT while there is no CoT few shot data, skip few shot for now
-    if args.few_shot:
-        logging.info("Generating few-shot examples...")
-        data_to_sample_from = pd.read_parquet(args.train_data_path)
-        examples = _generate_few_shot_examples(data_to_sample_from, args.few_shot)
-    
-    for _, row in tqdm(data.iterrows(), total=len(data), desc="Processing rows"):
-        query = INSTRUCTION+row["query_cot"]
-        choices = row["choices"] 
-        gold_label = row["gold"]
-        record_id = row["id"]
-        
-        # Add few shot examples if specified
-        query = examples + query if args.few_shot else query
+    logging.info("Starting batch inference...")
 
-        # Generate probabilities
-        pred_prob, text_prediction_lable = _generate(model, tokenizer, query, choices)
+    # Prepare the batches
+    for i in tqdm(range(0, len(data), BATCH_SIZE), total=len(data)//BATCH_SIZE, desc="Processing batches"):
+        batch = data.iloc[i:i+BATCH_SIZE]
 
-        # Prepare the result dictionary
-        result = {
-            "id": record_id,
-            "pred_prob": pred_prob,
-            "pred_label": text_prediction_lable,
-            "label": gold_label,
-            "query": query,
-        }
-        results.append(result)
+        # Prepare the prompts and choices for the batch
+        queries = [INSTRUCTION + row["query_cot"] for _, row in batch.iterrows()]
+        choices = [row["choices"] for _, row in batch.iterrows()]
 
-    # Adjust the output paths based on the model type
+        # Generate batch predictions
+        predictions = _generate(model, tokenizer, queries, choices)
+
+        # Process and store the results
+        for idx, (good_prob, bad_prob, text_prediction_label) in enumerate(predictions):
+            row = batch.iloc[idx]
+            result = {
+                "id": row["id"],
+                "pred_prob": [good_prob, bad_prob],
+                "pred_label": text_prediction_label,
+                "label": row["gold"],
+                "query": queries[idx],
+            }
+            results.append(result)
+
+    # Save evaluation and inference results as before
+    logging.info("Evaluating the results...")
+    metrics = compute_binary_metrics_from_results(results)
+    logging.info(f"Evaluation on the inference results: {metrics}")
+
+    # Adjust output paths
     if args.lora_weights:
         args.evaluation_output_path = args.evaluation_output_path.replace(".json", f"_lora.json")
         args.inference_output_path = args.inference_output_path.replace(".json", f"_lora.json")
-        
-    # Adjust the output paths based on whether few shot examples are used
+    
     if args.few_shot:
         args.evaluation_output_path = args.evaluation_output_path.replace(".json", f"_{args.few_shot}_shot.json")
         args.inference_output_path = args.inference_output_path.replace(".json", f"_{args.few_shot}_shot.json")
     
-    # Print out evaluation results
-    logging.info(f"Evaluating the results...")
-    metrics = compute_binary_metrics_from_results(results)
-    print(f"Evaluation on the inference results:{metrics}")
-    logging.info(f"Saving evaluation results to {args.evaluation_output_path}...")
+    # Save results to JSON
     os.makedirs(os.path.dirname(args.evaluation_output_path), exist_ok=True)
     jdump(metrics, args.evaluation_output_path)
     logging.info("Evaluation results saved successfully.")
     
-    # Save results to a JSON file using jdump
-    logging.info(f"Saving inference results to {args.inference_output_path}...")
     os.makedirs(os.path.dirname(args.inference_output_path), exist_ok=True)
     jdump(results, args.inference_output_path)
     logging.info("Inference results saved successfully.")
+
 
 
 if __name__ == "__main__":
