@@ -41,7 +41,8 @@ MAX_MEMORY = {0: "64GiB", 1: "64GiB"}  # Adjust based on your setup
 SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING.value
 INSTRUCTION = Prompts.INSTRUCTION_STEP_BY_STEP.value
 BATCH_SIZE = 32
-
+## FIXME this batch inference script has potential bug when getting the probs for computing AUC KS etc. 
+# Must check the code during next inference  
 
 @dataclass
 class Arguments:
