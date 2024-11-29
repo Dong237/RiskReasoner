@@ -4,6 +4,8 @@ from enum import Enum
 # the three instructiosn are tested specifically on Qwen2.5-7B-Instruct and shown to be able to elicit
 # proper CoT rationales. In case of model changes, please test the instructions again and adapt.
 
+SPLIT_TOKEN = "Final assessment"
+
 class Prompts(Enum):
     # System Prompts
     SYSTEM_PROMPT_CREDIT_SCORING = (
@@ -17,7 +19,7 @@ class Prompts(Enum):
         "trained machine learning system as reference (and reference only).\n\n"
         "Please analyse the given information and give your reasoning steps, also use your prior knowledge. "
         "Give your final answer in the end in this format: "
-        "'My final assessment: [choose from \"good\" or \"bad\"]' "
+        f"{SPLIT_TOKEN} [choose from \"good\" or \"bad\"]' "
         "(Make sure you use lower case and do NOT add any other texts or symbols (e.g., **) after the word \"good\" or \"bad\").\n"
     )
 
@@ -28,7 +30,7 @@ class Prompts(Enum):
         "Please analyse the given information and give your reasoning steps, also use your prior knowledge. "
         "The following steps below can be used as an example, but I encourage you to be flexible and analyse "
         "using different logical steps depending on the specific problem, "
-        "and give your final answer in the end by saying 'My final assessment:'.\n\n"
+        f"and give your final answer in the end by saying {SPLIT_TOKEN}.\n\n"
         "### Steps for Assessing Loan Status\n\n"
         "1. **Understand the Objective**: Approach the task methodically, ensuring all relevant factors are considered "
         "before making a decision.\n"
@@ -38,7 +40,7 @@ class Prompts(Enum):
         "5. **Review Supporting Factors**: Consider additional evidence that provides further confidence or raises concerns.\n"
         "6. **Integrate External Insights**: Leverage external predictions or tools to complement your evaluation.\n"
         "7. **Make a Decision**: Combine all insights to arrive at a clear and reasoned classification of \"good\" or \"bad\". "
-        "Give your decision in this format: 'My final assessment: [choose from \"good\" or \"bad\"]' "
+        f"Give your decision in this format: {SPLIT_TOKEN}: [choose from \"good\" or \"bad\"] "
         "(Make sure you use lower case and do NOT add any other texts or symbols after the word \"good\" or \"bad\").\n"
     )
 
@@ -55,9 +57,9 @@ class Prompts(Enum):
         "    - Combine all factors to form a holistic assessment, taking into account the prediction probabilities "
         "provided by the machine learning model.\n"
         "3. **In the end of your output**: after presenting the reasoning steps, give your final answer in the following "
-        "format: 'Final assessment: [choose from \"good\" or \"bad\"]'. "
+        f"format: '{SPLIT_TOKEN}: [choose from \"good\" or \"bad\"]'. "
         "End you output with one of the assessment token, this means that your last output token can only be either "
         "\"good\" or \"bad\", not any other texts or symbols. "
-        "For example: don't use **Final Assessment: good**, instead just say Final assessment: good (without '**').\n\n"
+        f"For example: don't use **{SPLIT_TOKEN}: good**, instead just say {SPLIT_TOKEN}: good (without '**').\n\n"
         "Here is the customer's credit report:\n"
     )
