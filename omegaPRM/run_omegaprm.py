@@ -85,53 +85,21 @@ def process_question(omega_prm: OmegaPRM, question: Dict[str, str]):
 
 
 # Save collected data for each question
-def save_to_file(data: Dict, file_path: str):
+def save_question_data(collected_data: Dict, index: int, output_path: str):
     """
-    Saves a dictionary to a JSONL file.
-    
-    Parameters:
-        data (Dict): The data to be written to the file.
-        file_path (str): The path to the file to save the data.
-    """
-    with open(file_path, "a") as fd:
-        line = json.dumps(data)
-        fd.write(f"{line}\n")
-    logging.info(f"Data saved to {file_path}")
+    Save the collected data for a processed question to a JSONL file.
 
-
-# Refactored `save_question_data` to use `save_to_file`
-def save_question_data(collected_data: Dict, index: int, output_path: tuple):
-    """
-    Save the collected data for a processed question to the appropriate JSONL file(s).
-    
     Parameters:
         collected_data (Dict): Data collected for the question, including reasoning steps.
         index (int): The index of the question being processed.
-        output_path (tuple): Tuple containing paths to the output files for "tree" and "text" data.
+        output_path (str): Path to the output JSONL file.
     """
-    output_file_tree, output_file_text = output_path
+
     collected_data["question_id"] = index
-    
-    if output_file_tree:
-        save_to_file(collected_data, output_file_tree)
-    
-    if output_file_text:
-        save_to_file(collected_data, output_file_text)
-
-
-def get_output_path(output_dir, save_data_type) -> tuple:
-    output_file_tree, output_file_text = None, None
-    if save_data_type in ["tree", "both"]:
-        output_file_tree = os.path.join(output_dir, f"{DS_NAME}_tree.jsonl")
-        # ensure file is emtpy
-        with open(output_file_tree, "w") as fd:
-            fd.write("")
-    if save_data_type in ["text", "both"]:
-        output_file_text = os.path.join(output_dir, f"{DS_NAME}_text.jsonl")
-        # ensure file is emtpy
-        with open(output_file_text, "w") as fd:
-            fd.write("")
-    return output_file_tree, output_file_text
+    with open(output_path, "a") as fd:
+        line = json.dumps(collected_data)
+        fd.write(f"{line}\n")
+    logging.info(f"Question {index} is saved to {output_path}")
 
 
 def main(args):
@@ -149,7 +117,10 @@ def main(args):
 
     setup_logging()
     os.makedirs(args.output_dir, exist_ok=True)
-    output_path = get_output_path(args.output_dir, args.save_data_type)
+    output_file = os.path.join(args.output_dir, f"{DS_NAME}.jsonl")
+    # ensure output_file is empty since we are appending to it later
+    with open(output_file, "w") as fd:
+        fd.write("")
 
     logging.info("Starting OmegaPRM processing")
     logging.info(f"Using model: {args.model_name} on device: {args.device}")
@@ -187,7 +158,7 @@ def main(args):
             logging.info(f"Question passed filter, processing question num {idx}...")
             passed_question_ids.append(idx)
             collected_data = process_question(omega_prm, question)
-            save_question_data(collected_data, idx, output_path)
+            save_question_data(collected_data, idx, output_file)
             processed_count += 1
         else:
              logging.info(f"Question did not pass filter, skipping question num: {idx}")
