@@ -1,6 +1,7 @@
 import os 
 import io
 import json
+import netrc
 import logging
 import colorlog
 from sklearn.metrics import (
@@ -231,3 +232,13 @@ def compute_binary_metrics_from_results(results):
     }
 
     return metrics
+
+
+## Training / Finetuning
+def is_wandb_logged_in():
+    netrc_path = os.path.expanduser("~/.netrc")
+    if not os.path.exists(netrc_path):
+        return False
+    
+    auth = netrc.netrc(netrc_path).authenticators("api.wandb.ai")
+    return bool(auth)
