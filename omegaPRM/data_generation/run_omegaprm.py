@@ -14,8 +14,14 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.constants import Prompts
 from utils.helper import setup_logging, jload, jdump
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+
 import torch
 torch.cuda.empty_cache()
+print("="*50)
+print(torch.cuda.current_device())  # Prints the ID of the GPU being used
+print("Device Name:", torch.cuda.get_device_name(torch.cuda.current_device())) 
+print("="*50)
 
 DS_NAME = "risk_reasoner"
 QUESTION_KEY = "query_cot"
