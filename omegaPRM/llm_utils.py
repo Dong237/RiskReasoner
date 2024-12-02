@@ -23,7 +23,7 @@ class LLMService:
     A class to manage a large language model (LLM) service using Hugging Face's transformers library.
     """
 
-    def __init__(self, model_name: str = "/data/youxiang/huggingface/Qwen2.5-Math-7B-Instruct",
+    def __init__(self, model_name: str = "Qwen2.5-Math-7B-Instruct",
                  device: str = "cuda", max_new_tokens: int = 2048,
                  temperature: float = 0.7, top_k: int = 30, top_p: float = 0.9, model_type: str="hf"):
         """
@@ -50,16 +50,23 @@ class LLMService:
         self.tokenizer = None
         self.load_lock = threading.Lock()
 
+
     def start_service(self):
         """
         Start the LLM service by loading the model into the chosen pipeline if it's not already loaded.
         Ensures thread-safe loading using a lock.
         """
         with self.load_lock:
+            # tokneizer is used for both model types
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             if self.model_type == "hf":
                 if self.model is None or self.tokenizer is None:
                     print(f"Loading Hugging Face model '{self.model_name}' on device '{self.device}'...")
-                    self.model, self.tokenizer = self._load_model_and_tokenizer(self.model_name)
+                    self.model = AutoModelForCausalLM.from_pretrained(
+                        self.model_name,
+                        torch_dtype="auto",
+                        device_map="cuda"
+                        )
                     print(f"Hugging Face model loaded successfully on GPU {self.model.device}.")
             elif self.model_type == "vllm":
                 if self.llm is None:
@@ -68,6 +75,7 @@ class LLMService:
                     print("vLLM model loaded successfully.")
             else:
                 raise ValueError("Unsupported model_type. Choose 'hf' for Hugging Face or 'vllm' for vLLM.")
+
 
     def generate_response(self, prompt: str, num_copies: int = 2) -> List[str]:
         """
@@ -86,6 +94,7 @@ class LLMService:
             return self._generate_response_vllm(prompt, num_copies)
         else:
             raise ValueError("Unsupported model_type. Choose 'hf' for Hugging Face or 'vllm'.")
+
 
     def _generate_response_hf(self, prompt: str, num_copies: int = 2) -> List[str]:
         """
@@ -156,23 +165,26 @@ class LLMService:
             top_p=self.top_p,
             max_tokens=self.max_new_tokens
         )
+        
+        messages = [
+            [
+                {"role": "system", "content": SYSTEM_PROMPT},  # Common system message
+                {"role": "user", "content": prompt}  # User's input prompt
+            ]
+            for _ in range(num_copies)
+        ]
 
-        prompts = [prompt] * num_copies
+        # Apply the chat template (assumes the tokenizer has an apply_chat_template method)
+        prompts = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False, 
+            add_generation_prompt=True  # Add generation-specific prompt (like stop tokens, etc.)
+        )
+
+        # prompts = [prompt] * num_copies
         responses = self.llm.generate(prompts, sampling_params=sampling_params)
 
         return [response.outputs[0].text for response in responses]
-
-    def _load_model_and_tokenizer(self, model_name_or_path, lora_weights=None):
-        """
-        Load model and tokenizer from Hugging Face.
-        """
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name_or_path,
-            torch_dtype="auto",
-            device_map="cuda"
-        )
-        tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
-        return model, tokenizer
 
 
 if __name__ == "__main__":
