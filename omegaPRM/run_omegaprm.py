@@ -14,6 +14,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.constants import Prompts
 from utils.helper import setup_logging, jload, jdump
 
+import torch
+torch.cuda.empty_cache()
 
 DS_NAME = "risk_reasoner"
 QUESTION_KEY = "query_cot"
