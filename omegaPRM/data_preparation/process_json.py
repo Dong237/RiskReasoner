@@ -89,7 +89,11 @@ def split_questions_uniformly(input_filepath: str, output_directory: str, num_fi
 
 # Example usage
 if __name__ == "__main__":
-    split_questions_uniformly("/data/youxiang/repos/RiskReasoner/datasets/posterior/train_posterior.json", "datasets/posterior/split_output", 2)
+    split_questions_uniformly(
+        "/data/youxiang/repos/RiskReasoner/datasets/posterior/train_posterior_sampled.json", 
+        "datasets/posterior/split_output", 
+        4
+        )
 #
 # # Sampling a subset of questions from the original file
 #   sample_questions("extracted_problems_and_answers.json", "sampled_questions.json", 10)
