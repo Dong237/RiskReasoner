@@ -1,5 +1,4 @@
 # This code is based on the revised code from fastchat based on tatsu-lab/stanford_alpaca.
-import netrc
 import time
 import json
 import math
@@ -29,12 +28,13 @@ from sklearn.metrics import roc_auc_score, log_loss, accuracy_score
 
 torch.cuda.empty_cache()
 random.seed(42)
+
 IGNORE_TOKEN_ID = LabelSmoother.ignore_index
 LOCAL_RANK = None
 STEP_TAG = "\n\n"     # Step tag that may also exist in the Instruction
 STEP_TAG_REAL = "ки"  # Step tag that only exist in the reasoning steps 
 GOOD_TOKEN, BAD_TOKEN = '+', '-'
-SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING
+SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING.value
 
 
 @dataclass
@@ -54,11 +54,7 @@ class DataArguments:
         default=False, 
         metadata={"help": "Whether to preprocess data upfront or not."}
     )
-    validation: bool = field(
-        default=True, 
-        metadata={"help": "Whether to split the dataset into training and validation."}
-    )
-    validation_size: int = 1000
+    validation_fraction: float = 0.1
 
 
 @dataclass
@@ -175,9 +171,10 @@ def preprocess(sources, tokenizer, max_len=2048):
     def find_all_indices(lst, element):
         return [i for i, x in enumerate(lst) if x == element]
     
-    step_tag_real_id = tokenizer.encode(f"{STEP_TAG_REAL}")[-1]
-    good_token_id = tokenizer.encode(f"{GOOD_TOKEN}")
-    bad_token_id = tokenizer.encode(f"{BAD_TOKEN}")
+    # Note that there must be a space in front of the STEP_TAG_REAL
+    step_tag_real_id = tokenizer.encode(f" {STEP_TAG_REAL}")[-1] 
+    good_token_id = tokenizer.encode(f"{GOOD_TOKEN}")[-1]
+    bad_token_id = tokenizer.encode(f"{BAD_TOKEN}")[-1]
     input_ids, labels, attentionn_masks = [], [], []
     
     for example in sources:
@@ -201,9 +198,9 @@ def preprocess(sources, tokenizer, max_len=2048):
         # example['label'] = example['label'][:len(indices)]
         tokenized_inputs['labels'] = [IGNORE_TOKEN_ID] * len(tokenized_inputs['input_ids'])
         for i, index in enumerate(indices):
-            if example['label'][i] == GOOD_TOKEN:
+            if example['label'][i] in [GOOD_TOKEN, 1]:
                 tokenized_inputs['labels'][index] = good_token_id
-            elif example['label'][i] == BAD_TOKEN:
+            elif example['label'][i] in [BAD_TOKEN, 0]:
                 tokenized_inputs['labels'][index] = bad_token_id
             else:
                 raise ValueError('Invalid label')
@@ -288,22 +285,32 @@ def make_supervised_data_module(
     )
     rank0_print("Loading data...")
 
-    train_json = json.load(open(data_args.data_path, "r"))
-    train_dataset = dataset_cls(train_json, tokenizer=tokenizer, max_len=max_len)
+    # Load the full dataset
+    full_data = json.load(open(data_args.data_path, "r"))
 
-    if data_args.validation:
+    # Shuffle the data to ensure random distribution
+    random.shuffle(full_data)
+
+    # If validation is specified, split the dataset
+    if data_args.validation_fraction:
         logging.info("Using validation dataset while training")
-        eval_json = random.sample(
-            train_json, 
-            data_args.validation_size,
-            )
-        eval_dataset = dataset_cls(eval_json, tokenizer=tokenizer, max_len=max_len)
+        # Split the data into training and validation sets
+        assert data_args.validation_fraction <= 1.0, "Validation fraction must be between 0 and 1"
+        validation_size = math.ceil(len(full_data) * data_args.validation_fraction)
+        eval_data = full_data[:validation_size]
+        train_data = full_data[validation_size:]
+        # Create datasets
+        eval_dataset = dataset_cls(eval_data, tokenizer=tokenizer, max_len=max_len)
     else:
         eval_dataset = None
+        train_data = full_data
+
+    # Create training dataset
+    train_dataset = dataset_cls(train_data, tokenizer=tokenizer, max_len=max_len)
     return dict(train_dataset=train_dataset, eval_dataset=eval_dataset)
 
 
-def compute_metrics(eval_pred, candidate_tokens):
+def compute_metrics(eval_pred):
     """Compute evaluation metrics."""
     preds, labels = eval_pred
     auc = roc_auc_score(labels, preds[:, 1])
