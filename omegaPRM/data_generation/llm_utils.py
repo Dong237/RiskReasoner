@@ -2,7 +2,7 @@ import os
 import torch
 import threading
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from utils.constants import Prompts
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import List
