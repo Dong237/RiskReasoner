@@ -1,9 +1,16 @@
-# This code is based on the revised code from fastchat based on tatsu-lab/stanford_alpaca.
+"""
+This script is adapted from [Qwen Fintuning Script](https://github.com/QwenLM/Qwen/blob/main/finetune.py)
+and the [script for training PRM from openR](https://github.com/openreasoner/openr/blob/main/prm/code/finetune_qwen.py) 
+All credits are given to the original authors
+"""
+
 import time
 import json
 import math
 import random
 import logging
+import functools
+from tqdm import tqdm
 import os
 from typing import Literal
 from typing import Dict, Optional, List
@@ -11,7 +18,7 @@ from wandb.sdk import login
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from utils.helper import is_wandb_logged_in
-from utils.constants import Prompts
+from utils.constants import Prompts, STEP_TAG
 
 import torch
 from torch.utils.data import Dataset
@@ -21,18 +28,16 @@ from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
 import transformers 
 from transformers import Trainer, GPTQConfig, deepspeed, DataCollatorWithPadding
 from transformers.trainer_pt_utils import LabelSmoother
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training, TaskType
 from accelerate.utils import DistributedType
 from sklearn.metrics import roc_auc_score, log_loss, accuracy_score
-
 
 torch.cuda.empty_cache()
 random.seed(42)
 
 IGNORE_TOKEN_ID = LabelSmoother.ignore_index
 LOCAL_RANK = None
-STEP_TAG = "\n\n"     # Step tag that may also exist in the Instruction
-STEP_TAG_REAL = "ки"  # Step tag that only exist in the reasoning steps 
+STEP_TAG_REAL = "ки"  # Step tag that will only exist in the reasoning steps 
 GOOD_TOKEN, BAD_TOKEN = '+', '-'
 SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING.value
 
@@ -42,6 +47,14 @@ class ModelArguments:
     model_name_or_path: Optional[str] = field(
         default="Qwen2.5-1.5B-Instruct-GPTQ-Int8"
         )
+    hidden_dropout_prob: float = field(
+        default=0.1,
+        metadata={"help": "Dropout for the transformer layers"}
+    )
+    attention_probs_dropout_prob: float = field(
+        default=0.1,
+        metadata={"help": "Dropout for the attention probabilities"}
+    )
 
 
 @dataclass
@@ -66,7 +79,7 @@ class WandbArguments:
     timeout: int = None
     wandb_project: str = "RiskReasoner"
     wandb_run_name: str = ""
-    wandb_watch: Literal["false", "gradients", "all"] = "false "
+    wandb_watch: Literal["false", "gradients", "all"] = "false"
     wandb_log_model: Literal["false", "checkpoint", "end"] = "false"
 
 
@@ -88,6 +101,7 @@ class TrainingArguments(transformers.TrainingArguments):
     gradient_accumulation_steps: int = 1
     logging_strategy: str = "steps"
     logging_steps: int = 10
+    logging_dir: str = "logs/prm"
     eval_strategy: str = "steps"
     eval_steps: int = 10
     save_strategy: str = "steps"
@@ -172,22 +186,22 @@ def preprocess(sources, tokenizer, max_len=2048):
         return [i for i, x in enumerate(lst) if x == element]
     
     # Note that there must be a space in front of the STEP_TAG_REAL
-    step_tag_real_id = tokenizer.encode(f" {STEP_TAG_REAL}")[-1] 
+    step_tag_real_id = tokenizer.encode(f"{STEP_TAG_REAL}")[-1] 
     good_token_id = tokenizer.encode(f"{GOOD_TOKEN}")[-1]
     bad_token_id = tokenizer.encode(f"{BAD_TOKEN}")[-1]
-    input_ids, labels, attentionn_masks = [], [], []
+    input_ids, labels, attention_masks = [], [], []
     
-    for example in sources:
+    for example in tqdm(sources, desc="Preprocessing data..."):
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},  # Common system message
-            {"role": "user", "content": example['question']}  # User's input prompt
+            {"role": "system", "content": SYSTEM_PROMPT},  
+            {"role": "user", "content": example['question']}
         ]
         question_with_template = tokenizer.apply_chat_template(
             messages,
             tokenize=False,  # We handle tokenization ourselves
             add_generation_prompt=True  # Add generation-specific prompt (like stop tokens, etc.)
         )
-        input_text = question_with_template + example['process'].replace(STEP_TAG, STEP_TAG_REAL)
+        input_text = question_with_template + example['reasoning_steps'].replace(STEP_TAG, STEP_TAG_REAL)
         tokenized_inputs = tokenizer(
             input_text, 
             truncation=True, 
@@ -195,7 +209,6 @@ def preprocess(sources, tokenizer, max_len=2048):
             max_length=max_len
             )
         indices = find_all_indices(tokenized_inputs['input_ids'], step_tag_real_id)
-        # example['label'] = example['label'][:len(indices)]
         tokenized_inputs['labels'] = [IGNORE_TOKEN_ID] * len(tokenized_inputs['input_ids'])
         for i, index in enumerate(indices):
             if example['label'][i] in [GOOD_TOKEN, 1]:
@@ -208,12 +221,12 @@ def preprocess(sources, tokenizer, max_len=2048):
     
         input_ids.append(tokenized_inputs["input_ids"])
         labels.append(tokenized_inputs["labels"])
-        attentionn_masks.append(tokenized_inputs["attention_mask"])
+        attention_masks.append(tokenized_inputs["attention_mask"])
         
     return dict(
         input_ids=torch.tensor(input_ids, dtype=torch.int),
         labels=torch.tensor(labels, dtype=torch.int),
-        attention_mask=torch.tensor(attentionn_masks, dtype=torch.int),
+        attention_mask=torch.tensor(attention_masks, dtype=torch.int),
     )
 
 
@@ -225,7 +238,6 @@ class SupervisedDataset(Dataset):
         super(SupervisedDataset, self).__init__()
 
         rank0_print("Formatting inputs...")
-        # sources = [example["conversations"] for example in raw_data]
         data_dict = preprocess(raw_data, tokenizer, max_len)
 
         self.input_ids = data_dict["input_ids"]
@@ -265,7 +277,7 @@ class LazySupervisedDataset(Dataset):
         if i in self.cached_data_dict:
             return self.cached_data_dict[i]
 
-        ret = preprocess(self.raw_data, self.tokenizer, self.max_len)
+        ret = preprocess([self.raw_data[i]], self.tokenizer, self.max_len)
         ret = dict(
             input_ids=ret["input_ids"][0],
             labels=ret["labels"][0],
@@ -310,23 +322,43 @@ def make_supervised_data_module(
     return dict(train_dataset=train_dataset, eval_dataset=eval_dataset)
 
 
+# def compute_metrics(eval_pred):
+#     """Compute evaluation metrics."""
+#     preds, labels = eval_pred
+#     auc = roc_auc_score(labels, preds[:, 1])
+#     ll = log_loss(labels, preds)
+#     acc = accuracy_score(labels, preds > 0.5)
+#     return {"auc": auc, "log_loss": ll, "accuracy": acc}
+
 def compute_metrics(eval_pred):
-    """Compute evaluation metrics."""
-    preds, labels = eval_pred
-    auc = roc_auc_score(labels, preds[:, 1])
-    ll = log_loss(labels, preds)
-    acc = accuracy_score(labels, preds > 0.5)
-    return {"auc": auc, "log_loss": ll, "accuracy": acc}
+    pre, labels = eval_pred
+    auc = roc_auc_score(pre[1], pre[0])
+    ll = log_loss(pre[1], pre[0])
+    acc = accuracy_score(pre[1], pre[0] > 0.5)
+    result ={
+        'auc': auc, 
+        'll': ll, 
+        'acc': acc, 
+    } 
+    return result
+
+# def preprocess_logits_for_metrics(logits, labels, CANDIDATE_TOKENS):
+#     """Preprocess logits for custom metrics computation."""
+#     indices = torch.nonzero(
+#         (labels == CANDIDATE_TOKENS[0]) | (labels == CANDIDATE_TOKENS[1]), as_tuple=True
+#     )
+#     gold_labels = (labels[indices[0], indices[1]] == CANDIDATE_TOKENS[0]).long()
+#     step_logits = logits[indices[0], indices[1]][:, [CANDIDATE_TOKENS[1], CANDIDATE_TOKENS[0]]]
+#     return torch.softmax(step_logits, dim=-1)[:, 1], gold_labels
 
 
-def preprocess_logits_for_metrics(logits, labels, candidate_tokens):
-    """Preprocess logits for custom metrics computation."""
-    indices = torch.nonzero(
-        (labels == candidate_tokens[0]) | (labels == candidate_tokens[1]), as_tuple=True
-    )
-    gold_labels = (labels[indices[0], indices[1]] == candidate_tokens[0]).long()
-    step_logits = logits[indices[0], indices[1]][:, [candidate_tokens[1], candidate_tokens[0]]]
-    return torch.softmax(step_logits, dim=-1)[:, 1], gold_labels
+# Wrapping preprocess_logits_for_metrics to include candidate_tokens
+def preprocess_logits_for_metrics(logits, labels, good_token_id, bad_token_id):
+    labels_index = torch.argwhere(torch.bitwise_or(labels == good_token_id, labels == bad_token_id))
+    gold = torch.where(labels[labels_index[:, 0], labels_index[:, 1]] == bad_token_id, 0, 1)
+    logits = logits[labels_index[:, 0], labels_index[:, 1]][:, [bad_token_id, good_token_id]]
+    prob = torch.softmax(logits, dim=-1)
+    return prob[:, 1], gold
 
 
 def train():
@@ -367,6 +399,9 @@ def train():
         os.environ["WANDB_PROJECT"] = wandb_args.wandb_project
         os.environ["WANDB_WATCH"] = wandb_args.wandb_watch
         os.environ["WANDB_LOG_MODEL"] = wandb_args.wandb_log_model
+    else:
+        training_args.report_to = ["tensorboard"]
+        logging.info(f"Using {training_args.report_to} for logging training information...")
 
     # TODO To understand this (This serves for single-gpu qlora?)
     if getattr(training_args, 'deepspeed', None) and int(os.environ.get("WORLD_SIZE", 1))==1:
@@ -401,6 +436,8 @@ def train():
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
         trust_remote_code=True,
+        hidden_dropout_prob=model_args.hidden_dropout_prob,
+        attention_probs_dropout_prob=model_args.attention_probs_dropout_prob,
     )
     config.use_cache = False # TODO: why set it to false?
 
@@ -451,7 +488,7 @@ def train():
             target_modules=lora_args.lora_target_modules,
             lora_dropout=lora_args.lora_dropout,
             bias=lora_args.lora_bias,
-            task_type="CAUSAL_LM",
+            task_type=TaskType.CAUSAL_LM,
             modules_to_save=modules_to_save  # This argument serves for adding new tokens.
         )
         if lora_args.q_lora:
@@ -479,6 +516,13 @@ def train():
     # Data collator for dynamic padding
     data_collator = DataCollatorWithPadding(tokenizer)
     
+    good_token_id = tokenizer.encode(f"{GOOD_TOKEN}")[-1]
+    bad_token_id = tokenizer.encode(f"{BAD_TOKEN}")[-1]
+    preprocess_logits_for_metrics_partial = functools.partial(
+        preprocess_logits_for_metrics,
+        good_token_id=good_token_id,
+        bad_token_id=bad_token_id,
+        )
     # Starting the trainner
     trainer = Trainer(
         model=model, 
@@ -487,8 +531,8 @@ def train():
         train_dataset=data_module["train_dataset"],
         eval_dataset=data_module["eval_dataset"],
         data_collator=data_collator,
-        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-        compute_metrics=compute_metrics,
+        # preprocess_logits_for_metrics=preprocess_logits_for_metrics_partial,
+        # compute_metrics=compute_metrics,
     )
 
     trainer.train()
