@@ -4,6 +4,7 @@ from enum import Enum
 # the three instructiosn are tested specifically on Qwen2.5-7B-Instruct and shown to be able to elicit
 # proper CoT rationales. In case of model changes, please test the instructions again and adapt.
 
+STEP_TAG = "\n\n"
 SPLIT_TOKEN = "Final assessment"
 
 class Prompts(Enum):
