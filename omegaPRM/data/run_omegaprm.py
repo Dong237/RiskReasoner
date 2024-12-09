@@ -1,3 +1,4 @@
+import os
 import argparse
 import json
 import logging
@@ -6,19 +7,12 @@ from tqdm import tqdm
 from typing import Dict
 import torch
 torch.cuda.empty_cache()
-from omegaprm import LanguageModel, OmegaPRM
 
-import os
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from omegaprm import LanguageModel, OmegaPRM
 from utils.constants import Prompts
 from utils.helper import setup_logging, jload, jdump
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "6"
-
-import torch
-torch.cuda.empty_cache()
-print("="*50)
 print(torch.cuda.current_device())  # Prints the ID of the GPU being used
 print("Device Name:", torch.cuda.get_device_name(torch.cuda.current_device())) 
 print("="*50)

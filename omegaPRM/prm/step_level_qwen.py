@@ -15,8 +15,6 @@ import os
 from typing import Literal
 from typing import Dict, Optional, List
 from wandb.sdk import login
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from utils.helper import is_wandb_logged_in
 from utils.constants import Prompts, STEP_TAG
 
