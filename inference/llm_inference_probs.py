@@ -1,3 +1,4 @@
+import os
 import torch
 import logging
 import pandas as pd
@@ -9,18 +10,13 @@ from transformers import (
     AutoModelForCausalLM, 
     AutoTokenizer
 )
-
-import os
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
-
 from utils.helper import (
     jdump, 
     setup_logging, 
     compute_binary_metrics_from_results
 )
 from utils.constants import Prompts
+
 
 SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING.value
 

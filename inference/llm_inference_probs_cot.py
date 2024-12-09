@@ -4,6 +4,8 @@ more complex instruction to elicit CoT process from the LLM and upgrade the infe
 process to multi-GPU inference usign ``accelerate``.
 """
 
+
+import os
 import random
 import torch
 torch.cuda.empty_cache()
@@ -17,11 +19,6 @@ from transformers import (
     AutoModelForCausalLM, 
     AutoTokenizer
 )
-
-import os
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from utils.helper import (
     jdump, 
     setup_logging, 

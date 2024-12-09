@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import json
 import logging
@@ -18,10 +19,6 @@ from sklearn.metrics import (
 
 import argparse
 from tqdm import tqdm
-
-import os
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.helper import (
     setup_logging,
     preprocess_combined_data,

@@ -1,5 +1,7 @@
+import os
 import torch
 torch.cuda.empty_cache()
+
 import logging
 from typing import Literal
 from tqdm import tqdm
@@ -7,10 +9,6 @@ import pandas as pd
 from peft import PeftModel
 # from verifier import Verifier
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
-import os
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.helper import jload, jdump
 from utils.constants import Prompts, SPLIT_TOKEN
 

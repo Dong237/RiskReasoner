@@ -5,8 +5,6 @@ import torch
 import logging
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.helper import (
     jload, 
     jdump,

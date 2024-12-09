@@ -1,3 +1,4 @@
+import os
 import torch
 torch.cuda.empty_cache()
 import logging
@@ -6,10 +7,6 @@ from typing import List
 from functools import reduce
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
-import os
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.constants import Prompts, SPLIT_TOKEN, STEP_TAG
 from utils.helper import jload, jdump, compute_binary_metrics_from_results, setup_logging
 
