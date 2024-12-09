@@ -33,6 +33,7 @@ Outputs:
 """
 
 
+import os
 import argparse
 import logging
 import pandas as pd
@@ -43,10 +44,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.naive_bayes import GaussianNB
 import xgboost as xgb
 import lightgbm as lgb
-
-import os
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.helper import (
     jload,
     jdump,

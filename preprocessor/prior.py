@@ -39,9 +39,6 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from sklearn.model_selection import train_test_split
-
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.helper import jdump
 
 
