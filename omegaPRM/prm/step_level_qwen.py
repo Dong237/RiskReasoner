@@ -296,7 +296,12 @@ def make_supervised_data_module(
     rank0_print("Loading data...")
 
     # Load the full dataset
-    full_data = json.load(open(data_args.data_path, "r"))
+    if data_args.data_path.endswith(".json"):
+        full_data = json.load(open(data_args.data_path, "r"))
+    elif data_args.data_path.endswith(".jsonl"):
+        full_data = [json.loads(line) for line in open(data_args.data_path, "r")]
+    else:
+        raise ValueError(f"Unsupported data format: {data_args.data_path}")
 
     # Shuffle the data to ensure random distribution
     random.shuffle(full_data)
