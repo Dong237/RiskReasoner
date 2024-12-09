@@ -149,6 +149,7 @@ def _load_model_and_tokenizer(model_name_or_path, lora_weights=None):
         if lora_weights:
             logging.info(f"Loading LoRA weights from {lora_weights}")
             model = PeftModel.from_pretrained(model, lora_weights) 
+        # TODO need left padding here
         tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         logging.info("Model and tokenizer loaded successfully.")

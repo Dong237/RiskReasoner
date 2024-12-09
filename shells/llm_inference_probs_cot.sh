@@ -3,10 +3,10 @@
 # This bash script starts experiments on every LLM automatically, 
 # including CALM model which requires the downloaded LoRA weights 
 
-export CUDA_VISIBLE_DEVICES=2,3
+export CUDA_VISIBLE_DEVICES=7
 
 # Few-shot variable
-FEW_SHOT_N=8
+# FEW_SHOT_N=8
 
 # List of models to test (excluding the special model)
 MODELS=(
@@ -14,12 +14,12 @@ MODELS=(
     # "/data/youxiang/huggingface/Llama-3.1-8B-Instruct"
     "/data/tangbo/plms/Qwen2.5-7B-Instruct/"
     # "/data/youxiang/huggingface/Llama-2-7b-chat-hf"
-    "/data/youxiang/huggingface/Qwen2.5-14B-Instruct-GPTQ-Int8"
+    # "/data/youxiang/huggingface/Qwen2.5-14B-Instruct-GPTQ-Int8"
     # "/data/tangkai/models/Qwen2.5-72B-Instruct-GPTQ-Int4"
 )
 
 # Dataset paths
-TEST_DATA_PATH="datasets/posterior/test_balanced_posterior.parquet"
+TEST_DATA_PATH="datasets/posterior/train_posterior.parquet"
 TRAIN_DATA_PATH="datasets/posterior/train_posterior.parquet"
 
 # Extract dataset name
@@ -45,7 +45,7 @@ for MODEL_NAME_OR_PATH in "${MODELS[@]}"; do
         --train_data_path "$TRAIN_DATA_PATH" \
         --inference_output_path "$INFERENCE_OUTPUT_PATH" \
         --evaluation_output_path "$EVALUATION_OUTPUT_PATH" \
-        --few_shot "$FEW_SHOT_N"  ## comment out this line if you want zero shot
+        ## -few_shot "$FEW_SHOT_N"  ## comment out this line if you want zero shot
 done
 
 echo "All experiments completed!"

@@ -13,6 +13,7 @@ from transformers import (
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 from utils.helper import (
     jdump, 
@@ -21,7 +22,7 @@ from utils.helper import (
 )
 from utils.constants import Prompts
 
-SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING
+SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING.value
 
 
 @dataclass
@@ -254,6 +255,9 @@ def main():
         choices = row["choices"] 
         gold_label = row["gold"]
         record_id = row["id"]
+        
+        if gold_label==0:
+            continue
         
         # Add few shot examples if specified
         query = examples + query if args.few_shot else query

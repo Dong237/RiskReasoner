@@ -163,7 +163,6 @@ def _generate(model, tokenizer, prompt, choices):
     for 'good' and 'bad' tokens.
     """
     try:
-
         # Prepare the messages for input
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -316,6 +315,9 @@ def main():
         choices = row["choices"] 
         gold_label = row["gold"]
         record_id = row["id"]
+        
+        if gold_label==0:
+            continue
         
         # Add few shot examples if specified
         query = examples + query if args.few_shot else query
