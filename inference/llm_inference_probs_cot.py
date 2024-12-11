@@ -1,17 +1,21 @@
+
 """
-This is a simpel copy from ``llm_inference_probs.py``, except that the script uses
+This is a simpel copy from `llm_inference_probs.py, except that the script uses
 more complex instruction to elicit CoT process from the LLM and upgrade the inference
-process to multi-GPU inference usign ``accelerate``.
+process to multi-GPU inference usign `accelerate.
 """
 
 
 import os
+import re
 import random
 import torch
 torch.cuda.empty_cache()
 import logging
+import itertools
 import pandas as pd
 from tqdm import tqdm
+from typing import Literal
 from dataclasses import dataclass, field
 from peft import PeftModel
 from transformers import (
@@ -24,12 +28,18 @@ from utils.helper import (
     setup_logging, 
     compute_binary_metrics_from_results
 )
-from utils.constants import Prompts
+from utils.constants import (
+    Prompts, 
+    STEP_TAG, 
+    SPLIT_TOKEN, 
+    SEARCH_PATTERN
+)
 from accelerate import (
     init_empty_weights,
     infer_auto_device_map, 
     load_checkpoint_and_dispatch
     )
+
 
 SEED = 42
 random.seed(SEED)
@@ -37,9 +47,9 @@ MAX_MEMORY = {0: "64GiB", 1: "64GiB"}  # Adjust based on your setup
 
 SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING.value
 INSTRUCTION = Prompts.INSTRUCTION_STEP_BY_STEP.value
-BATCH_SIZE = 32
-## FIXME this batch inference script has potential bug when getting the probs for computing AUC KS etc. 
-# Must check the code during next inference  
+# Define batch size
+BATCH_SIZE = 1
+
 
 @dataclass
 class Arguments:
@@ -64,12 +74,6 @@ class Arguments:
             "help": "Path to the .parquet file containing the test data."
         }
     )
-    few_shot: int = field(
-        default=None,
-        metadata={
-            "help": "n-shot to use for while inferencing"
-        }
-    )
     inference_output_path: str = field(
         default="results/inferences/inference_results.json",
         metadata={
@@ -90,7 +94,7 @@ class Arguments:
     )
 
 
-# def _load_model_and_tokenizer(model_name_or_path, lora_weights=None):
+# def load_model_and_tokenizer(model_name_or_path, lora_weights=None):
 #     """
 #     Load the model and tokenizer, optimized for multi-GPU using the Accelerate library.
 #     """
@@ -132,7 +136,7 @@ class Arguments:
 #     return model, tokenizer
 
 
-def _load_model_and_tokenizer(model_name_or_path, lora_weights=None):
+def load_model_and_tokenizer(model_name_or_path, lora_weights=None):
     """
     Load the model and tokenizer from the specified path, optionally loading LoRA weights.
     """
@@ -146,220 +150,274 @@ def _load_model_and_tokenizer(model_name_or_path, lora_weights=None):
         if lora_weights:
             logging.info(f"Loading LoRA weights from {lora_weights}")
             model = PeftModel.from_pretrained(model, lora_weights) 
-        # TODO need left padding here
-        tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
-        tokenizer.pad_token_id = tokenizer.eos_token_id
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_name_or_path,
+            model_max_length=2048,
+            truncation=True,
+            padding_side="left",
+            use_fast=False,
+            trust_remote_code=True,
+            )
         logging.info("Model and tokenizer loaded successfully.")
         return model, tokenizer
     except Exception as e:
         logging.error(f"Failed to load model or tokenizer: {e}")
         raise
-    
 
-def _generate(model, tokenizer, prompts, choices):
+
+def get_variation(word: Literal["good", "bad"]):
     """
-    Generate classification output for a batch of prompts, returning probabilities
-    for 'good' and 'bad' tokens in batches.
+    Generate all variations of the given word with different cases 
+    (lowercase, capitalized, uppercase) and combinations of leading 
+    and trailing spaces.
     """
-    try:
-        # Prepare the messages for input using the chat template for each prompt
-        messages = [
-            [
-                {"role": "system", "content": SYSTEM_PROMPT},  # Common system message
-                {"role": "user", "content": prompt}  # User's input prompt
-            ]
-            for prompt in prompts
-        ]
+    # Define variations
+    cases = [word.lower(), word.capitalize(), word.upper()]  # e.g., "good", "Good", "GOOD"
+    spaces = ["", " ", "  "]  # No space, one space, two spaces
+
+    # Generate all combinations with leading and trailing spaces
+    variations = []
+    for leading_space, case, trailing_space in itertools.product(spaces, cases, spaces):
+        variations.append(f"{leading_space}{case}{trailing_space}")
+    return variations
+
+
+def get_tokens_id(tokenizer, good_token, bad_token, pred_token):
+    """
+    Given the two tokens from ``choices`` and the predicted token,
+    get the corresponding token ids. The ids of the two binary tokens
+    are used later for performing masking and retrieving the probabilities.
+    """
+    good_tokens, bad_tokens = get_variation(good_token), get_variation(bad_token)
+    good_tokens_id = [tokenizer(token).input_ids[0] for token in good_tokens]
+    bad_tokens_id = [tokenizer(token).input_ids[0] for token in bad_tokens]
+    if pred_token in good_tokens:
+        idx = good_tokens.index(pred_token)
+    elif pred_token in bad_tokens:
+        idx = bad_tokens.index(pred_token)
+    else:
+        return None, None
+    good_token_id, bad_token_id = good_tokens_id[idx], bad_tokens_id[idx]
+    return good_token_id, bad_token_id
+
+
+def find_continuous_indices(tensor_pattern, tensor_sequence):
+    """
+    Finds the starting indices of a continuous subsequence (tensor_pattern) 
+    in a given sequence (tensor_sequence).
+    """
+    pattern_length = len(tensor_pattern)
+
+    # Create sliding windows of size equal to the pattern length over the sequence
+    sliding_windows = tensor_sequence.unfold(0, pattern_length, 1)  # Shape: [sequence_length - pattern_length + 1, pattern_length]
+    
+    # Compare each window with the pattern
+    is_match = (sliding_windows == tensor_pattern).all(dim=1)  # Check for full matches
+    
+    # Find the first match
+    match_indices = torch.where(is_match)[0]
+    if len(match_indices) > 0:
+        start_index = match_indices[0].item()  # Convert to Python int
+        return list(range(start_index, start_index + pattern_length))
+    return []
+
+
+def predict_token_and_probs(
+    model, 
+    tokenizer, 
+    model_inputs, 
+    generated_dict, 
+    choices_list, 
+    idx
+    ):
+    
+    #######################
+    ##  Text Prediction  ##
+    #######################
+    # Extract the generated text for the current prompt
+    generated_ids = generated_dict.sequences[idx]
+    generated_ids = generated_ids[model_inputs["input_ids"][idx].size()[-1]:]
+    response = tokenizer.decode(generated_ids, skip_special_tokens=True)
+    
+    text_prediction = response.lower().split(SPLIT_TOKEN.lower())[-1].replace(":", "").strip()
+    good_token, bad_token = choices_list[idx]
+    if good_token in text_prediction:
+        pred_label = 0
+    elif bad_token in text_prediction:
+        pred_label = 1
+    else:
+        pred_label = "miss"
+
+    #######################
+    ##  Prob Prediction  ##
+    #######################
+    # Search for the prediction in similar form of "final assessment: xxx"
+    match = re.search(SEARCH_PATTERN, response, re.IGNORECASE)
+    if match:
+        matched_text = match.group(0).replace(STEP_TAG, "")
+        pred_token = matched_text.split(":")[-1]
         
-        # Apply the chat template for each prompt
-        text_inputs = tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
+        good_token_id, bad_token_id = get_tokens_id(
+            tokenizer, good_token, bad_token, pred_token
+            )
+        
+        if not good_token_id or not bad_token_id:
+            # Make a random guess if output has no valid prediction
+            good_prob, bad_prob = 0.5, 0.5
+        else:
+            # Now start to get the logits for the pred_token 
+            matched_generated_ids = tokenizer(
+                matched_text, return_tensors="pt"
+                )["input_ids"].to(model.device)
+            indices = find_continuous_indices(matched_generated_ids[0], generated_ids)
+            # Note that in normal cases, indices[-1] is not the last index of generated_ids
+            # because '<|im_end|>' should be the last token generated.
+            target_logits = generated_dict.logits[indices[-1]][idx]
+            
+            mask = torch.full_like(target_logits, float('-inf'))
+            mask[good_token_id], mask[bad_token_id] = 0, 0
+            
+            masked_logits = target_logits + mask
+
+            # Compute probabilities
+            probabilities = torch.softmax(masked_logits, dim=-1)
+            good_prob = probabilities[good_token_id].item()
+            bad_prob = probabilities[bad_token_id].item()
+    else:
+        # make a random guess if regex failed / output has no prediction
+        good_prob, bad_prob = 0.5, 0.5
+        
+    return good_prob, bad_prob, pred_label
+            
+            
+
+def batch_predict(model, tokenizer, prompts, choices_list, record_ids, gold_labels):
+    """
+    Predict for a batch of data and return the results.
+    """
+    # Prepare the batch prompts
+    messages = [
+        [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt}
+            ] 
+        for prompt in prompts
+    ]
+
+    # Convert prompts to text using the tokenizer's chat template
+    texts = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+
+    # Tokenize the inputs as a batch 
+    # and pad to the max length in this batch
+    model_inputs = tokenizer(
+        texts, 
+        return_tensors="pt", 
+        padding=True,
+        truncation=True
+        ).to(model.device)
+
+    # Configure generation settings for deterministic decoding
+    model.generation_config.temperature = None
+    model.generation_config.top_p = None
+    model.generation_config.top_k = None
+
+    # Generate responses for the batch
+    with torch.no_grad():
+        generated_dict = model.generate(
+            **model_inputs,
+            do_sample=False,
+            max_new_tokens=2048,
+            return_dict_in_generate=True,
+            output_logits=True,
+            output_scores=True,
         )
 
-        # Tokenize all prompts at once
-        model_inputs = tokenizer(
-            text_inputs, return_tensors="pt", padding=True, truncation=True
-            ).to(model.device)
-
-        # Configure generation settings
-        model.generation_config.temperature = None
-        model.generation_config.top_p = None
-        model.generation_config.top_k = None
-
-        #################################
-        ## Generate probs prediction  ##
-        #################################
-        # Get logits from the model
-        # FIXME always keep in mind that the most probable token is 
-        # not necessarily "good" or "bad", could be e.g., "GOOD" or other forms
-        # in this case (weak instruction-following ability e.g, chat-version) 
-        # this binary approach will fail
-        # Get logits from the model for the entire batch
-        with torch.no_grad():
-            outputs = model(**model_inputs)
-            logits = outputs.logits
-
-        good_token, bad_token = choices[0]
-        good_token_id = tokenizer.convert_tokens_to_ids(good_token)
-        bad_token_id = tokenizer.convert_tokens_to_ids(bad_token)
-
-        # Extract probabilities for "good" and "bad" from the logits (for each prompt in the batch)
-        last_token_logits = logits[:, -1, :]  # Get logits for the last token in each sequence
-
-        # Logit Masking for "good" and "bad"
-        mask = torch.full_like(last_token_logits, float('-inf'))
-        mask[:, good_token_id] = 0
-        mask[:, bad_token_id] = 0
-        masked_logits = last_token_logits + mask
-
-        # Compute probabilities for each prompt
-        probabilities = torch.softmax(masked_logits, dim=-1)
-        good_probs = probabilities[:, good_token_id].cpu().numpy()
-        bad_probs = probabilities[:, bad_token_id].cpu().numpy()
-
-        ##############################
-        ## Generate text prediction ##
-        ##############################
-        with torch.no_grad():
-            generated_ids = model.generate(
-                **model_inputs,
-                do_sample=False,
-                max_new_tokens=2048,
+    # Process each result in the batch
+    results = []
+    for idx in range(BATCH_SIZE):
+        # Make prediction
+        good_prob, bad_prob, pred_label = predict_token_and_probs(
+            model, 
+            tokenizer, 
+            model_inputs, 
+            generated_dict, 
+            choices_list, 
+            idx
             )
-            generated_ids = [
-                output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
-            ]
-            responses = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        
+        # Prepare the result dictionary
+        result = {
+            "id": record_ids[idx],
+            "pred_prob": [good_prob, bad_prob],
+            "pred_label": pred_label,
+            "label": gold_labels[idx],
+            "query": prompts[idx],
+        }
+        results.append(result)
 
-        # Post-processing the predictions
-        predictions = []
-        for i, response in enumerate(responses):
-            text_prediction = response.split("\n\n")[-1].strip().lower()
-            if good_token in text_prediction:
-                text_prediction_label = 0
-            elif bad_token in text_prediction:
-                text_prediction_label = 1
-            else:
-                text_prediction_label = "miss"
-            predictions.append((good_probs[i], bad_probs[i], text_prediction_label))
-
-        return predictions  # Return a list of tuples: (good_prob, bad_prob, text_prediction_label)
-    
-    except Exception as e:
-        logging.error(f"Error during batch generation: {e}")
-        raise
-
-
-
-def _generate_few_shot_examples(dataframe, n):
-    import pandas as pd  # Ensure pandas is imported
-    
-    split_token = "Text:"
-    examples = "Here are some provided examples: \n\n"
-
-    # Split the dataframe into "good" and "bad" based on the "answer" column
-    good_df = dataframe[dataframe["answer"] == "good"]
-    bad_df = dataframe[dataframe["answer"] == "bad"]
-    
-    # Calculate how many "good" and "bad" examples are needed
-    num_good = (n // 2) + (n % 2)  # "good" gets the extra example if n is odd
-    num_bad = n // 2
-
-    # Sample the required number of examples from each subset
-    good_samples = good_df.sample(n=num_good, random_state=42)
-    bad_samples = bad_df.sample(n=num_bad, random_state=42)
-
-    # Combine and shuffle the sampled examples
-    sampled_df = pd.concat([good_samples, bad_samples]).sample(frac=1, random_state=42)  # Shuffle the combined samples
-
-    # Construct the examples string
-    for _, sample in sampled_df.iterrows():
-        query = split_token + sample["query"].split(split_token)[-1]
-        answer = sample["answer"]
-        examples += query + answer + "\n\n"
-    return examples
+    return results
     
 
 def main():
     # Set up logging
     setup_logging()
 
-    # Parse arguments
+    # Parse arguments using HfArgumentParser
     parser = HfArgumentParser(Arguments)
     args = parser.parse_args_into_dataclasses()[0]
 
     # Load model and tokenizer
-    try:
-        model, tokenizer = _load_model_and_tokenizer(
-            args.model_name_or_path,
-            lora_weights=args.lora_weights
-        )
-    except Exception as e:
-        logging.error(f"Exiting program due to error: {e}")
-        return
+    model, tokenizer = load_model_and_tokenizer(
+        args.model_name_or_path,
+        lora_weights=args.lora_weights
+    )
 
     # Load input data
-    try:
-        logging.info(f"Loading data from {args.test_data_path}...")
-        data = pd.read_parquet(args.test_data_path)
-        logging.info(f"Data loaded successfully. Total rows: {len(data)}")
-    except Exception as e:
-        logging.error(f"Failed to load data: {e}")
-        return
+    data = pd.read_parquet(args.test_data_path)
+    logging.info(f"Data loaded successfully. Total rows: {len(data)}")
 
     # Prepare results list
-    results = []    
+    results = []
 
+    # Process data in batches
     logging.info("Starting batch inference...")
+    for start_idx in tqdm(range(0, len(data), BATCH_SIZE), desc="Processing batches"):
+        end_idx = min(start_idx + BATCH_SIZE, len(data))
+        batch = data.iloc[start_idx:end_idx]
 
-    # Prepare the batches
-    for i in tqdm(range(0, len(data), BATCH_SIZE), total=len(data)//BATCH_SIZE, desc="Processing batches"):
-        batch = data.iloc[i:i+BATCH_SIZE]
+        # Prepare inputs for the batch
+        prompts = [INSTRUCTION + row["query_cot"] for _, row in batch.iterrows()]
+        choices_list = [row["choices"] for _, row in batch.iterrows()]
+        gold_labels = [row["gold"] for _, row in batch.iterrows()]
+        record_ids = [row["id"] for _, row in batch.iterrows()]
 
-        # Prepare the prompts and choices for the batch
-        queries = [INSTRUCTION + row["query_cot"] for _, row in batch.iterrows()]
-        choices = [row["choices"] for _, row in batch.iterrows()]
+        # Make predictions for the batch
+        batch_results = batch_predict(model, tokenizer, prompts, choices_list, record_ids, gold_labels)
 
-        # Generate batch predictions
-        predictions = _generate(model, tokenizer, queries, choices)
+        # Append batch results to overall results
+        results.extend(batch_results)
 
-        # Process and store the results
-        for idx, (good_prob, bad_prob, text_prediction_label) in enumerate(predictions):
-            row = batch.iloc[idx]
-            result = {
-                "id": row["id"],
-                "pred_prob": [good_prob, bad_prob],
-                "pred_label": text_prediction_label,
-                "label": row["gold"],
-                "query": queries[idx],
-            }
-            results.append(result)
-
-    # Save evaluation and inference results as before
-    logging.info("Evaluating the results...")
-    metrics = compute_binary_metrics_from_results(results)
-    logging.info(f"Evaluation on the inference results: {metrics}")
-
-    # Adjust output paths
+    # Adjust the output paths based on the model type
     if args.lora_weights:
         args.evaluation_output_path = args.evaluation_output_path.replace(".json", f"_lora.json")
         args.inference_output_path = args.inference_output_path.replace(".json", f"_lora.json")
-    
-    if args.few_shot:
-        args.evaluation_output_path = args.evaluation_output_path.replace(".json", f"_{args.few_shot}_shot.json")
-        args.inference_output_path = args.inference_output_path.replace(".json", f"_{args.few_shot}_shot.json")
-    
-    # Save results to JSON
+
+    # Print out evaluation results
+    logging.info(f"Evaluating the results...")
+    metrics = compute_binary_metrics_from_results(results)
+    print(f"Evaluation on the inference results:{metrics}")
     os.makedirs(os.path.dirname(args.evaluation_output_path), exist_ok=True)
     jdump(metrics, args.evaluation_output_path)
-    logging.info("Evaluation results saved successfully.")
-    
+    logging.info(f"Evaluation results saved to {args.evaluation_output_path}.")
+
+    # Save results to a JSON file using jdump
     os.makedirs(os.path.dirname(args.inference_output_path), exist_ok=True)
     jdump(results, args.inference_output_path)
-    logging.info("Inference results saved successfully.")
-
+    logging.info(f"Inference results saved to {args.inference_output_path}.")
 
 
 if __name__ == "__main__":
