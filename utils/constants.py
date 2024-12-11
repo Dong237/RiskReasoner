@@ -6,6 +6,9 @@ from enum import Enum
 
 STEP_TAG = "\n\n"
 SPLIT_TOKEN = "Final assessment"
+# NOTE change the search pattern accordingly when the SPLIT_TOKEN changes
+SEARCH_PATTERN = r"\s*Final\s*Assessment\s*:\s*(good|bad)" 
+
 
 class Prompts(Enum):
     # System Prompts
