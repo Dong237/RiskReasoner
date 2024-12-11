@@ -40,7 +40,7 @@ from accelerate import (
     load_checkpoint_and_dispatch
     )
 
-
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 SEED = 42
 random.seed(SEED)
 MAX_MEMORY = {0: "64GiB", 1: "64GiB"}  # Adjust based on your setup
@@ -48,7 +48,7 @@ MAX_MEMORY = {0: "64GiB", 1: "64GiB"}  # Adjust based on your setup
 SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING.value
 INSTRUCTION = Prompts.INSTRUCTION_STEP_BY_STEP.value
 # Define batch size
-BATCH_SIZE = 1
+BATCH_SIZE = 16
 
 
 @dataclass
@@ -254,7 +254,9 @@ def predict_token_and_probs(
     # Search for the prediction in similar form of "final assessment: xxx"
     match = re.search(SEARCH_PATTERN, response, re.IGNORECASE)
     if match:
-        matched_text = match.group(0).replace(STEP_TAG, "")
+        matched_text = match.group(0)
+        # To clean up the matched text, this is vital!
+        matched_text = matched_text.replace(STEP_TAG, "").replace("\n", "") 
         pred_token = matched_text.split(":")[-1]
         
         good_token_id, bad_token_id = get_tokens_id(
@@ -386,6 +388,8 @@ def main():
     # Process data in batches
     logging.info("Starting batch inference...")
     for start_idx in tqdm(range(0, len(data), BATCH_SIZE), desc="Processing batches"):
+        if start_idx < 128:
+            continue
         end_idx = min(start_idx + BATCH_SIZE, len(data))
         batch = data.iloc[start_idx:end_idx]
 
