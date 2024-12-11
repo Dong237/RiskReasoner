@@ -28,7 +28,12 @@ from utils.helper import (
     setup_logging, 
     compute_binary_metrics_from_results
 )
-from utils.constants import Prompts, SPLIT_TOKEN, SEARCH_PATTERN
+from utils.constants import (
+    Prompts, 
+    STEP_TAG, 
+    SPLIT_TOKEN, 
+    SEARCH_PATTERN
+)
 from accelerate import (
     init_empty_weights,
     infer_auto_device_map, 
@@ -65,12 +70,6 @@ class Arguments:
         default="datasets/test.parquet",
         metadata={
             "help": "Path to the .parquet file containing the test data."
-        }
-    )
-    few_shot: int = field(
-        default=None,
-        metadata={
-            "help": "n-shot to use for while inferencing"
         }
     )
     inference_output_path: str = field(
@@ -276,7 +275,7 @@ def predict(model, tokenizer, prompt, choices):
     # Search for the prediction in similar form of "final assessment: xxx"
     match = re.search(SEARCH_PATTERN, response, re.IGNORECASE)
     if match:
-        matched_text = match.group(0)
+        matched_text = match.group(0).replace(STEP_TAG, "")
         pred_token = matched_text.split(":")[-1]
         
         good_token_id, bad_token_id = get_tokens_id(
@@ -313,35 +312,6 @@ def predict(model, tokenizer, prompt, choices):
     return [good_prob, bad_prob], pred_label
     
 
-def _generate_few_shot_examples(dataframe, n):
-    import pandas as pd  # Ensure pandas is imported
-    
-    split_token = "Text:"
-    examples = "Here are some provided examples: \n\n"
-
-    # Split the dataframe into "good" and "bad" based on the "answer" column
-    good_df = dataframe[dataframe["answer"] == "good"]
-    bad_df = dataframe[dataframe["answer"] == "bad"]
-    
-    # Calculate how many "good" and "bad" examples are needed
-    num_good = (n // 2) + (n % 2)  # "good" gets the extra example if n is odd
-    num_bad = n // 2
-
-    # Sample the required number of examples from each subset
-    good_samples = good_df.sample(n=num_good, random_state=42)
-    bad_samples = bad_df.sample(n=num_bad, random_state=42)
-
-    # Combine and shuffle the sampled examples
-    sampled_df = pd.concat([good_samples, bad_samples]).sample(frac=1, random_state=42)  # Shuffle the combined samples
-
-    # Construct the examples string
-    for _, sample in sampled_df.iterrows():
-        query = split_token + sample["query"].split(split_token)[-1]
-        answer = sample["answer"]
-        examples += query + answer + "\n\n"
-    return examples
-    
-
 def main():
     # Set up logging
     setup_logging()
@@ -360,12 +330,6 @@ def main():
     data = pd.read_parquet(args.test_data_path)
     logging.info(f"Data loaded successfully. Total rows: {len(data)}")
     
-    # FIXME for CoT while there is no CoT few shot data, skip few shot for now
-    if args.few_shot:
-        logging.info("Generating few-shot examples...")
-        data_to_sample_from = pd.read_parquet(args.train_data_path)
-        examples = _generate_few_shot_examples(data_to_sample_from, args.few_shot)
-    
     # Prepare results list
     results = []
     
@@ -376,9 +340,6 @@ def main():
         choices = row["choices"] 
         gold_label = row["gold"]
         record_id = row["id"]
-        
-        # Add few shot examples if specified
-        query = examples + query if args.few_shot else query
 
         # Making predictions
         pred_prob, pred_label = predict(model, tokenizer, query, choices)
@@ -397,11 +358,6 @@ def main():
     if args.lora_weights:
         args.evaluation_output_path = args.evaluation_output_path.replace(".json", f"_lora.json")
         args.inference_output_path = args.inference_output_path.replace(".json", f"_lora.json")
-        
-    # Adjust the output paths based on whether few shot examples are used
-    if args.few_shot:
-        args.evaluation_output_path = args.evaluation_output_path.replace(".json", f"_{args.few_shot}_shot.json")
-        args.inference_output_path = args.inference_output_path.replace(".json", f"_{args.few_shot}_shot.json")
     
     # Print out evaluation results
     logging.info(f"Evaluating the results...")
