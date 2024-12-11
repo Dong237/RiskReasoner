@@ -2,17 +2,27 @@ import os
 import torch
 torch.cuda.empty_cache()
 
+import re
+import itertools
 import logging
-from typing import Literal
+from typing import Literal, Optional, Union, List
 from tqdm import tqdm
 import pandas as pd
 from peft import PeftModel
-# from verifier import Verifier
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import (
+    AutoModelForCausalLM, 
+    AutoTokenizer, 
+    GenerationConfig
+)
 from utils.helper import jload, jdump
-from utils.constants import Prompts, SPLIT_TOKEN
+from utils.constants import (
+    Prompts, 
+    STEP_TAG, 
+    SPLIT_TOKEN, 
+    SEARCH_PATTERN
+)
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 
 SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING.value
@@ -23,15 +33,15 @@ class Generator:
     def __init__(
         self, 
         model_name_or_path: str = "Qwen2.5-Math-7B-Instruct",
-        verifier =  None, # Verifier =
         device: str = "cuda", 
         max_new_tokens: int = 2048,
-        temperature: float = 0.7, 
+        temperature: float = 1.0, 
         top_k: int = 50, 
         top_p: float = 1.0, 
         model_max_length: int = 2048,
         N: int = 1,        
-        lora_weights: str = None
+        lora_weights: Optional[str] = None,
+        cuda_visible_devices: Optional[Literal["0,1,2,3"]] = None
         ):
 
         self.model_name_or_path = model_name_or_path
@@ -46,38 +56,70 @@ class Generator:
         self.model = None
         self.tokenizer = None
         self.lora_weights = lora_weights
-        
-        self.verifier = verifier
-        self.N = N
+        self.cuda_visible_devices = cuda_visible_devices
+        self.N = N  # N is the N from "best-of-N" sampling
+
+    def __call__(self, data: List[dict]):
+        return self.generate(data)
+    
+    def generate(self, dataset: List[dict]):
+        if self.cuda_visible_devices:
+            self._load_tokenizer()
+            
+            visible_devices = [int(device) for device in self.cuda_visible_devices.split(",")]
+            num_devices = len(visible_devices)
+            
+            # Split data into chunks based on the number of devices
+            data_chunks = np.array_split(data, num_devices)
+            
+            # Process each chunk on a separate device
+            results = []
+            from concurrent import futures
+            
+            tasks = []
+            with futures.ThreadPoolExecutor(max_workers=num_devices) as executor:
+                # Dispatch tasks to GPUs
+                for i, chunk in enumerate(data_chunks):
+                    model_on_device = self._load_model_to_device(device=visible_devices[i])
+                    tasks.append(
+                        executor.submit(
+                            # TODO wrap this method into loop for concurrent processing
+                            self._generate_for_single_question, model_on_device, chunk)
+                        )
+                
+                # Collect the results as they finish
+                for future in tasks.as_completed(futures):
+                    results.extend(future.result())
+            
+            # Merge all results from all devices
+            data_tb_verified = {
+                "prompt": [item["prompt"] for item in results],
+                "response_N": [item["response_N"] for item in results],
+            }
+            
+        else:
+            self._start_service()
+            data_tb_verified = []
+            for data in tqdm(dataset):
+                result = self._generate_for_single_question(self.model, data)
+                data_tb_verified.append(result)
+            return data_tb_verified
 
     
-    def __call__(self, data: Literal[dict, pd.Series]):
-        # self._start_service()
-        prompt = INSTRUCTION + data["query_cot"]
-        choices = data["choices"] 
-        gold_label = data["gold"]
-        
-        response_N = self._generate_for_single_question(prompt, choices, gold_label)
-        data_tb_verified = {
-            "prompt": prompt,
-            "response_N": response_N,
-        }
-        
-        # if self.verifier:
-        #     response_best = self.verifier.verify(data_tb_verified)
-        return data_tb_verified
-    
-
-    def start_service(self):
+    def _load_model_to_device(self, device: int):
         logging.info("Loading model and tokenizer...")
-        self.model = AutoModelForCausalLM.from_pretrained(
+        if device:
+            device_map = f"cuda:{device}"
+        else:
+            device_map = "cuda"
+        model = AutoModelForCausalLM.from_pretrained(
             self.model_name_or_path,
             torch_dtype="auto",
-            device_map="cuda"
+            device_map=device_map
         )
-        if self.lora_weights:
-            logging.info(f"Loading LoRA weights from {self.lora_weights}")
-            self.model = PeftModel.from_pretrained(self.model, self.lora_weights) 
+        return model
+    
+    def _load_tokenizer(self):
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_name_or_path,
             model_max_length=self.model_max_length,
@@ -86,59 +128,22 @@ class Generator:
             use_fast=False,
             trust_remote_code=True,
             )
+
+    def _start_service(self):
+        logging.info("Loading model and tokenizer...")
+        self.model = self._load_model_to_device(device=None)
+        if self.lora_weights:
+            logging.info(f"Loading LoRA weights from {self.lora_weights}")
+            self.model = PeftModel.from_pretrained(self.model, self.lora_weights) 
+        self._load_tokenizer()
         logging.info("Model and tokenizer loaded successfully.")
+        
 
-    
-    def _generate_response(self, model_inputs):
-
-        # Generate responses using the model (batch inference)
-        with torch.no_grad():
-            generated_ids = self.model.generate(
-                **model_inputs,
-                do_sample=True,
-                max_new_tokens=self.max_new_tokens,
-                temperature=self.temperature,
-                top_k=self.top_k,
-                top_p=self.top_p
-            )
-        # Process the generated output and decode the results
-        generated_ids = [
-            output_ids[len(input_ids):]  # Slice the generation to remove the input part
-            for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
-        ]
-        # Decode all generated outputs in batch
-        responses = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        return responses
-
-
-    def _generate_probs(self, model_inputs, choices):
-        with torch.no_grad():
-            outputs = self.model(**model_inputs)
-            logits = outputs.logits
-
-        good_token, bad_token = choices
-        good_token_id = self.tokenizer.convert_tokens_to_ids(good_token)
-        bad_token_id = self.tokenizer.convert_tokens_to_ids(bad_token)
-        # Extract probabilities for "good" and "bad" from the logits (for each prompt in the batch)
-        # NOTE this extraction is not clean since the last token is not always good or bad
-        last_token_logits = logits[:, -1, :]  # Get logits for the last token in each sequence
-
-        # Logit Masking for "good" and "bad"
-        mask = torch.full_like(last_token_logits, float('-inf'))
-        mask[:, good_token_id] = 0
-        mask[:, bad_token_id] = 0
-        masked_logits = last_token_logits + mask
-
-        # Compute probabilities for each prompt
-        probabilities = torch.softmax(masked_logits, dim=-1)
-        good_probs = probabilities[:, good_token_id].cpu().numpy()
-        bad_probs = probabilities[:, bad_token_id].cpu().numpy()
-        return good_probs, bad_probs
-
-
-    def _generate_for_single_question(self, prompt, choices, gold_label):
-        results = []
-
+    def _generate_for_single_question(self, model, data):
+        prompt = INSTRUCTION + data["query_cot"]
+        choices = data["choices"] 
+        gold_label = data["gold"]
+        
         messages = [
             [
                 {"role": "system", "content": SYSTEM_PROMPT},  # Common system message
@@ -155,31 +160,188 @@ class Generator:
         )
         
         model_inputs = self.tokenizer(
-            prompts, return_tensors="pt", padding=True, truncation=True
-            ).to(self.model.device)
+            prompts, 
+            return_tensors="pt", 
+            padding=True, 
+            truncation=True
+            ).to(model.device)
 
-        responses = self._generate_response(model_inputs)
-        good_probs, bad_probs = self._generate_probs(model_inputs, choices)
-
-        good_token, bad_token = choices
-        for i, response in enumerate(responses):
-            last_sentence = response.lower().split(SPLIT_TOKEN.lower())[-1]
-            if good_token in last_sentence:
-                pred_label = 0
-            elif bad_token in last_sentence:
-                pred_label = 1
-            else:
-                pred_label = "miss"
+        generation_config = GenerationConfig(
+            temperature=self.temperature,     
+            top_p=self.top_p,           
+            top_k=self.top_k,
+            max_new_tokens=self.max_new_tokens,
+            do_sample=True,      
+        )
+        with torch.no_grad():
+            generated_dict = model.generate(
+                **model_inputs,
+                generation_config=generation_config,
+                return_dict_in_generate=True,
+                output_logits=True,
+                output_scores=True,
+            )
+            
+        # Process each result in the batch
+        results = []
+        for idx in range(self.N):
+            # Make prediction
+            probs, pred_label, response = self.predict_token_and_probs(
+                model, 
+                self.tokenizer, 
+                model_inputs, 
+                generated_dict, 
+                choices, 
+                idx
+                )
+        
             results.append(
                 {
-                    "id": i,
+                    "id": idx,
                     "reasoning_steps": response,
                     "pred_label": pred_label,
                     "gold_label": gold_label,
-                    "probs": [float(good_probs[i]), float(bad_probs[i])]
+                    "probs": probs
                     }
                 )
-        return results
+            
+        return {
+            "prompt": prompt,
+            "response_N": results,
+            }
+    
+    
+    @staticmethod
+    def get_variation(word: Literal["good", "bad"]):
+        """
+        Generate all variations of the given word with different cases 
+        (lowercase, capitalized, uppercase) and combinations of leading 
+        and trailing spaces.
+        """
+        # Define variations
+        cases = [word.lower(), word.capitalize(), word.upper()]  # e.g., "good", "Good", "GOOD"
+        spaces = ["", " ", "  "]  # No space, one space, two spaces
+
+        # Generate all combinations with leading and trailing spaces
+        variations = []
+        for leading_space, case, trailing_space in itertools.product(spaces, cases, spaces):
+            variations.append(f"{leading_space}{case}{trailing_space}")
+        return variations
+
+
+    def get_tokens_id(self, tokenizer, good_token, bad_token, pred_token):
+        """
+        Given the two tokens from ``choices`` and the predicted token,
+        get the corresponding token ids. The ids of the two binary tokens
+        are used later for performing masking and retrieving the probabilities.
+        """
+        good_tokens, bad_tokens = self.get_variation(good_token), self.get_variation(bad_token)
+        good_tokens_id = [tokenizer(token).input_ids[0] for token in good_tokens]
+        bad_tokens_id = [tokenizer(token).input_ids[0] for token in bad_tokens]
+        if pred_token in good_tokens:
+            idx = good_tokens.index(pred_token)
+        elif pred_token in bad_tokens:
+            idx = bad_tokens.index(pred_token)
+        else:
+            return None, None
+        good_token_id, bad_token_id = good_tokens_id[idx], bad_tokens_id[idx]
+        return good_token_id, bad_token_id
+
+
+    @staticmethod
+    def find_continuous_indices(tensor_pattern, tensor_sequence):
+        """
+        Finds the starting indices of a continuous subsequence (tensor_pattern) 
+        in a given sequence (tensor_sequence).
+        """
+        pattern_length = len(tensor_pattern)
+
+        # Create sliding windows of size equal to the pattern length over the sequence
+        sliding_windows = tensor_sequence.unfold(0, pattern_length, 1)  
+        
+        # Compare each window with the pattern
+        is_match = (sliding_windows == tensor_pattern).all(dim=1)  # Check for full matches
+        
+        # Find the first match
+        match_indices = torch.where(is_match)[0]
+        if len(match_indices) > 0:
+            start_index = match_indices[0].item()  # Convert to Python int
+            return list(range(start_index, start_index + pattern_length))
+        return []
+
+
+    def predict_token_and_probs(
+        self,
+        model, 
+        tokenizer, 
+        model_inputs, 
+        generated_dict, 
+        choices, 
+        idx
+        ):
+        
+        #######################
+        ##  Text Prediction  ##
+        #######################
+        # Extract the generated text for the current prompt
+        generated_ids = generated_dict.sequences[idx]
+        generated_ids = generated_ids[model_inputs["input_ids"][idx].size()[-1]:]
+        response = tokenizer.decode(generated_ids, skip_special_tokens=True)
+        
+        text_prediction = response.lower().split(SPLIT_TOKEN.lower())[-1].replace(":", "").strip()
+        good_token, bad_token = choices
+        if good_token in text_prediction:
+            pred_label = 0
+        elif bad_token in text_prediction:
+            pred_label = 1
+        else:
+            pred_label = "miss"
+
+        #######################
+        ##  Prob Prediction  ##
+        #######################
+        # Search for the prediction in similar form of "final assessment: xxx"
+        match = re.search(SEARCH_PATTERN, response, re.IGNORECASE)
+        if match:
+            matched_text = match.group(0)
+            # To clean up the matched text, this is vital!
+            matched_text = matched_text.replace(STEP_TAG, "").replace("\n", "") 
+            pred_token = matched_text.split(":")[-1]
+            
+            good_token_id, bad_token_id = self.get_tokens_id(
+                tokenizer, good_token, bad_token, pred_token
+                )
+            
+            if not good_token_id or not bad_token_id:
+                # Make a random guess if output has no valid prediction
+                good_prob, bad_prob = 0.5, 0.5
+            else:
+                # Now start to get the logits for the pred_token 
+                matched_generated_ids = tokenizer(
+                    matched_text, return_tensors="pt"
+                    )["input_ids"].to(model.device)
+                indices = self.find_continuous_indices(matched_generated_ids[0], generated_ids)
+                # Note that in normal cases, indices[-1] is not the last index of generated_ids
+                # because '<|im_end|>' should be the last token generated (or padded in batch inference).
+                target_logits = generated_dict.logits[indices[-1]][idx]
+                
+                mask = torch.full_like(target_logits, float('-inf'))
+                mask[good_token_id], mask[bad_token_id] = 0, 0
+                
+                masked_logits = target_logits + mask
+
+                # Compute probabilities
+                probabilities = torch.softmax(masked_logits, dim=-1)
+                good_prob = probabilities[good_token_id].item()
+                bad_prob = probabilities[bad_token_id].item()
+        else:
+            # make a random guess if regex failed / output has no prediction
+            good_prob, bad_prob = 0.5, 0.5
+            
+        return [good_prob, bad_prob], pred_label, response
+
+
+    
         
 
 if __name__ == "__main__":
@@ -213,8 +375,8 @@ if __name__ == "__main__":
 
     # Initialize the generator without the verifier part
     generator = Generator(
-        model_name_or_path="/data/tangbo/plms/Qwen2.5-7B-Instruct/", 
-        N=32,
+        model_name_or_path="/data/youxiang/huggingface/Qwen2.5-7B-Instruct", 
+        N=2,
         )
     generator.start_service()
     data_tb_verified_all = []
