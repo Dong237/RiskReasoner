@@ -388,8 +388,6 @@ def main():
     # Process data in batches
     logging.info("Starting batch inference...")
     for start_idx in tqdm(range(0, len(data), BATCH_SIZE), desc="Processing batches"):
-        if start_idx < 128:
-            continue
         end_idx = min(start_idx + BATCH_SIZE, len(data))
         batch = data.iloc[start_idx:end_idx]
 
