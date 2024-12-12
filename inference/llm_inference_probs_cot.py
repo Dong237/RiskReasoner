@@ -254,7 +254,7 @@ def predict_token_and_probs(
     if match:
         matched_text = match.group(0)
         # To clean up the matched text, this is vital!
-        matched_text = matched_text.replace(STEP_TAG, "").replace("\n", "")
+        matched_text = matched_text.replace(STEP_TAG, "").replace("\n", "").replace("*", "")
         pred_token = matched_text.split(":")[-1]
         
         good_token_id, bad_token_id = get_tokens_id(

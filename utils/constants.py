@@ -7,7 +7,9 @@ from enum import Enum
 STEP_TAG = "\n\n"
 SPLIT_TOKEN = "Final assessment"
 # NOTE change the search pattern accordingly when the SPLIT_TOKEN changes
-SEARCH_PATTERN = r"\s*Final\s*Assessment\s*:\s*(good|bad)" 
+# also this search pattern is not pefect, it does not capture "\n\n**Final Assessment:** good"
+# namely when ** is between "good" and "assessment", but this is a flaw I am not smart enough to balance
+SEARCH_PATTERN = r"\s*\*?\*?Final\s*[Aa]ssessment\*?\*?\s*:\s*(good|bad)\*?\*?"
 
 
 class Prompts(Enum):

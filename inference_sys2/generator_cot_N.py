@@ -23,7 +23,7 @@ from utils.constants import (
     SEARCH_PATTERN
 )
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+
 
 
 SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING.value
@@ -34,7 +34,6 @@ class Generator:
     def __init__(
         self, 
         model_name_or_path: str = "Qwen2.5-Math-7B-Instruct",
-        device: str = "cuda", 
         max_new_tokens: int = 2048,
         temperature: float = 1.0, 
         top_k: int = 50, 
@@ -46,7 +45,6 @@ class Generator:
         ):
 
         self.model_name_or_path = model_name_or_path
-        self.device = device
         
         self.max_new_tokens = max_new_tokens
         self.temperature = temperature
@@ -288,8 +286,8 @@ class Generator:
         if match:
             matched_text = match.group(0)
             # To clean up the matched text, this is vital!
-            matched_text = matched_text.replace(STEP_TAG, "").replace("\n", "")
-            pred_token = matched_text.split(":")[-1]
+            matched_text = matched_text.replace(STEP_TAG, "").replace("\n", "").replace("*", "") # get rid of possible '*' to get clean ids later
+            pred_token = matched_text.split(":")[-1] 
             
             good_token_id, bad_token_id = self.get_tokens_id(
                 tokenizer, good_token, bad_token, pred_token
@@ -309,7 +307,6 @@ class Generator:
                 # Note that in normal cases, indices[-1] is not the last index of generated_ids
                 # because '<|im_end|>' should be the last token generated (or padded in batch inference).
                 target_logits = generated_dict.logits[indices[-1]][idx]
-                
                 mask = torch.full_like(target_logits, float('-inf'))
                 mask[good_token_id], mask[bad_token_id] = 0, 0
                 
@@ -327,6 +324,7 @@ class Generator:
 
 
 if __name__ == "__main__":
+    os.environ["CUDA_VISIBLE_DEVICES"] = "2"
     # Create a sample data dictionary
     data = [
     {
@@ -355,7 +353,6 @@ if __name__ == "__main__":
     }
     ]
 
-    # Initialize the generator without the verifier part
     generator = Generator(
         model_name_or_path="/data/youxiang/huggingface/Qwen2.5-7B-Instruct", 
         N=2,
