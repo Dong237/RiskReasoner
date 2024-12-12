@@ -254,7 +254,7 @@ def predict_token_and_probs(
     if match:
         matched_text = match.group(0)
         # To clean up the matched text, this is vital!
-        matched_text = matched_text.replace(STEP_TAG, "").replace("\n", "").strip()
+        matched_text = matched_text.replace(STEP_TAG, "").replace("\n", "")
         pred_token = matched_text.split(":")[-1]
         
         good_token_id, bad_token_id = get_tokens_id(
@@ -269,7 +269,9 @@ def predict_token_and_probs(
             matched_generated_ids = tokenizer(
                 matched_text, return_tensors="pt"
                 )["input_ids"].to(model.device)
-            indices = find_continuous_indices(matched_generated_ids[0], generated_ids)
+            # FIXME during index matching below, I skip over the first token since its variant is quite complicated
+            # and unstable. But luckily, there are always more than 2 matched tokens in the list so this should be fine.
+            indices = find_continuous_indices(matched_generated_ids[0][1:], generated_ids)
             # Note that in normal cases, indices[-1] is not the last index of generated_ids
             # because '<|im_end|>' should be the last token generated.
             target_logits = generated_dict.logits[indices[-1]][idx]
