@@ -1,8 +1,6 @@
-
 """
-This is a simpel copy from `llm_inference_probs.py, except that the script uses
-more complex instruction to elicit CoT process from the LLM and upgrade the inference
-process to multi-GPU inference usign `accelerate.
+The script achieves the similar goal of `llm_inference_probs.py, except that it uses
+more complex instruction to elicit CoT process from the LLM to do binary classification.
 """
 
 
@@ -291,9 +289,17 @@ def predict_token_and_probs(
         
     return good_prob, bad_prob, pred_label
             
-            
-
-def batch_predict(model, tokenizer, prompts, choices_list, record_ids, gold_labels):
+    
+def batch_predict(
+    model, 
+    tokenizer, 
+    prompts, 
+    choices_list, 
+    record_ids, 
+    gold_labels, 
+    real_batch_size
+    ):
+    
     """
     Predict for a batch of data and return the results.
     """
@@ -340,7 +346,7 @@ def batch_predict(model, tokenizer, prompts, choices_list, record_ids, gold_labe
 
     # Process each result in the batch
     results = []
-    for idx in range(BATCH_SIZE):
+    for idx in range(real_batch_size):
         # Make prediction
         good_prob, bad_prob, pred_label = predict_token_and_probs(
             model, 
@@ -390,6 +396,7 @@ def main():
     for start_idx in tqdm(range(0, len(data), BATCH_SIZE), desc="Processing batches"):
         end_idx = min(start_idx + BATCH_SIZE, len(data))
         batch = data.iloc[start_idx:end_idx]
+        real_batch_size = end_idx - start_idx  # the last batch might be smaller than BATCH_SIZE
 
         # Prepare inputs for the batch
         prompts = [INSTRUCTION + row["query_cot"] for _, row in batch.iterrows()]
@@ -398,7 +405,15 @@ def main():
         record_ids = [row["id"] for _, row in batch.iterrows()]
 
         # Make predictions for the batch
-        batch_results = batch_predict(model, tokenizer, prompts, choices_list, record_ids, gold_labels)
+        batch_results = batch_predict(
+            model, 
+            tokenizer, 
+            prompts, 
+            choices_list, 
+            record_ids, 
+            gold_labels,
+            real_batch_size,
+            )
 
         # Append batch results to overall results
         results.extend(batch_results)
