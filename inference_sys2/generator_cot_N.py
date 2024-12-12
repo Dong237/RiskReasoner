@@ -76,7 +76,7 @@ class Generator:
         return data_tb_verified
 
     def _load_model_to_device(self, device: int):
-        logging.info("Loading model and tokenizer...")
+        logging.info("Loading model...")
         if device:
             device_map = f"cuda:{device}"
         else:
@@ -89,6 +89,7 @@ class Generator:
         return model
     
     def _load_tokenizer(self):
+        logging.info("Loading tokenizer...")
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_name_or_path,
             model_max_length=self.model_max_length,
@@ -99,7 +100,6 @@ class Generator:
             )
 
     def _start_service(self):
-        logging.info("Loading model and tokenizer...")
         self.model = self._load_model_to_device(device=None)
         if self.lora_weights:
             logging.info(f"Loading LoRA weights from {self.lora_weights}")
@@ -382,7 +382,7 @@ if __name__ == "__main__":
         model_name_or_path="/data/youxiang/huggingface/Qwen2.5-7B-Instruct", 
         N=2,
         )
-    data_tb_verified = generator(data)
+    results = generator(data)
         
-    jdump(data_tb_verified, "test.json")
+    jdump(results, "results_cot_N.json")
     print("Final data saved")
