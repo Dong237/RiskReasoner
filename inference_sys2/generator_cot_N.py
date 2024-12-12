@@ -13,8 +13,7 @@ from transformers import (
     AutoModelForCausalLM, 
     AutoTokenizer, 
     GenerationConfig
-)
-from concurrent import futures
+) 
 from utils.helper import jload, jdump, split_json
 from utils.constants import (
     Prompts, 
@@ -22,9 +21,6 @@ from utils.constants import (
     SPLIT_TOKEN, 
     SEARCH_PATTERN
 )
-
-
-
 
 SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING.value
 INSTRUCTION = Prompts.INSTRUCTION_STEP_BY_STEP.value
@@ -167,7 +163,7 @@ class Generator:
         results = []
         for idx in range(self.N):
             # Make prediction
-            probs, pred_label, response = self.predict_token_and_probs(
+            probs, pred_label, response = self._predict_token_and_probs(
                 model, 
                 self.tokenizer, 
                 model_inputs, 
@@ -193,7 +189,7 @@ class Generator:
     
     
     @staticmethod
-    def get_variation(word: Literal["good", "bad"]):
+    def _get_variation(word: Literal["good", "bad"]):
         """
         Generate all variations of the given word with different cases 
         (lowercase, capitalized, uppercase) and combinations of leading 
@@ -210,13 +206,13 @@ class Generator:
         return variations
 
 
-    def get_tokens_id(self, tokenizer, good_token, bad_token, pred_token):
+    def _get_tokens_id(self, tokenizer, good_token, bad_token, pred_token):
         """
         Given the two tokens from ``choices`` and the predicted token,
         get the corresponding token ids. The ids of the two binary tokens
         are used later for performing masking and retrieving the probabilities.
         """
-        good_tokens, bad_tokens = self.get_variation(good_token), self.get_variation(bad_token)
+        good_tokens, bad_tokens = self._get_variation(good_token), self._get_variation(bad_token)
         good_tokens_id = [tokenizer(token).input_ids[0] for token in good_tokens]
         bad_tokens_id = [tokenizer(token).input_ids[0] for token in bad_tokens]
         if pred_token in good_tokens:
@@ -230,7 +226,7 @@ class Generator:
 
 
     @staticmethod
-    def find_continuous_indices(tensor_pattern, tensor_sequence):
+    def _find_continuous_indices(tensor_pattern, tensor_sequence):
         """
         Finds the starting indices of a continuous subsequence (tensor_pattern) 
         in a given sequence (tensor_sequence).
@@ -249,9 +245,65 @@ class Generator:
             start_index = match_indices[0].item()  # Convert to Python int
             return list(range(start_index, start_index + pattern_length))
         return []
+    
+    
+    def _predict_probs(
+        self,
+        model, 
+        tokenizer, 
+        response, 
+        generated_ids, 
+        generated_logits,
+        good_token, 
+        bad_token,
+        idx
+        ):
+        match = re.search(SEARCH_PATTERN, response, re.IGNORECASE)
+        if match:
+            matched_text = match.group(0)
+            # To clean up the matched text, this is vital!
+            matched_text = matched_text.replace(STEP_TAG, "").replace("\n", "").replace("*", "") # get rid of possible '*' to get clean ids later
+            pred_token = matched_text.split(":")[-1] 
+            
+            good_token_id, bad_token_id = self._get_tokens_id(
+                tokenizer, good_token, bad_token, pred_token
+                )
+            
+            if not good_token_id or not bad_token_id:
+                # Make a random guess if output has no valid prediction
+                logging.warning(f"Output has no valid prediction, making a random guess.")
+                return 0.5, 0.5
+            else:
+                # Now start to get the logits for the pred_token 
+                matched_generated_ids = tokenizer(
+                    matched_text, return_tensors="pt"
+                    )["input_ids"].to(model.device)
+                # FIXME during index matching below, I skip over the first token since its variant is quite complicated
+                # and unstable. But luckily, there are always more than 2 matched tokens in the list so this should be fine.
+                indices = self._find_continuous_indices(matched_generated_ids[0][1:], generated_ids)
+                try:
+                    target_logits = generated_logits[indices[-1]][idx]
+                except:
+                    # This is quite rare but still can happen
+                    logging.warning(f"Index matching failed, making a random guess.")
+                    return 0.5, 0.5
+                
+                mask = torch.full_like(target_logits, float('-inf'))
+                mask[good_token_id], mask[bad_token_id] = 0, 0
+                masked_logits = target_logits + mask
+
+                # Compute probabilities
+                probabilities = torch.softmax(masked_logits, dim=-1)
+                good_prob = probabilities[good_token_id].item()
+                bad_prob = probabilities[bad_token_id].item()
+                return good_prob, bad_prob
+        else:
+            # make a random guess if regex failed / output has no prediction
+            logging.warning("Regex failed, making a random guess.")
+            return 0.5, 0.5
 
 
-    def predict_token_and_probs(
+    def _predict_token_and_probs(
         self,
         model, 
         tokenizer, 
@@ -282,43 +334,16 @@ class Generator:
         ##  Prob Prediction  ##
         #######################
         # Search for the prediction in similar form of "final assessment: xxx"
-        match = re.search(SEARCH_PATTERN, response, re.IGNORECASE)
-        if match:
-            matched_text = match.group(0)
-            # To clean up the matched text, this is vital!
-            matched_text = matched_text.replace(STEP_TAG, "").replace("\n", "").replace("*", "") # get rid of possible '*' to get clean ids later
-            pred_token = matched_text.split(":")[-1] 
-            
-            good_token_id, bad_token_id = self.get_tokens_id(
-                tokenizer, good_token, bad_token, pred_token
-                )
-            
-            if not good_token_id or not bad_token_id:
-                # Make a random guess if output has no valid prediction
-                good_prob, bad_prob = 0.5, 0.5
-            else:
-                # Now start to get the logits for the pred_token 
-                matched_generated_ids = tokenizer(
-                    matched_text, return_tensors="pt"
-                    )["input_ids"].to(model.device)
-                # FIXME during index matching below, I skip over the first token since its variant is quite complicated
-                # and unstable. But luckily, there are always more than 2 matched tokens in the list so this should be fine.
-                indices = self.find_continuous_indices(matched_generated_ids[0][1:], generated_ids)
-                # Note that in normal cases, indices[-1] is not the last index of generated_ids
-                # because '<|im_end|>' should be the last token generated (or padded in batch inference).
-                target_logits = generated_dict.logits[indices[-1]][idx]
-                mask = torch.full_like(target_logits, float('-inf'))
-                mask[good_token_id], mask[bad_token_id] = 0, 0
-                
-                masked_logits = target_logits + mask
-
-                # Compute probabilities
-                probabilities = torch.softmax(masked_logits, dim=-1)
-                good_prob = probabilities[good_token_id].item()
-                bad_prob = probabilities[bad_token_id].item()
-        else:
-            # make a random guess if regex failed / output has no prediction
-            good_prob, bad_prob = 0.5, 0.5
+        good_prob, bad_prob = self._predict_probs(
+            model, 
+            tokenizer, 
+            response, 
+            generated_ids, 
+            generated_dict.logits,
+            good_token, 
+            bad_token,
+            idx
+        )
             
         return [good_prob, bad_prob], pred_label, response
 
