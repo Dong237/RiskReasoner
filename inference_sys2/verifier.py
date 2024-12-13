@@ -10,11 +10,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from utils.constants import Prompts, SPLIT_TOKEN, STEP_TAG
 from utils.helper import jload, jdump, compute_binary_metrics_from_results, setup_logging
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "6"
-
 SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING.value
 INSTRUCTION = Prompts.INSTRUCTION_STEP_BY_STEP.value
-
 
 STEP_TAG_REAL = "ки"
 GOOD_TOKEN, BAD_TOKEN = '+', '-'
@@ -26,7 +23,8 @@ class Verifier:
         self,         
         model_name_or_path: str = "Qwen2.5-Math-7B-Instruct",
         lora_weights: str = None,
-        model_max_length: int = 2048,
+        model_max_length: int = 4096, # 2048 is too small according to experience with Qwen2.5-7B
+        batch_sze: int = 8,
         ):
         
         self.model_name_or_path = model_name_or_path
@@ -36,6 +34,7 @@ class Verifier:
         self.tokenizer = None
         
         self.model_max_length = model_max_length
+        self.batch_sze = batch_sze
     
     
     @staticmethod
@@ -128,24 +127,24 @@ class Verifier:
             
             batch_response[batch_idx]["step_tag_probs"] = step_tag_probs
             batch_response[batch_idx]["solution_level_score"] = self._get_solution_level_score(step_tag_probs)
-
+    
     
     def _get_best_response(self, response_N):
         resposne_best = max(response_N, key=lambda x: x['solution_level_score'])
         return resposne_best
     
     
-    def verify(self, data, batch_sze=4, save_N=True):
+    def verify(self, data, save_N=True):
         
         step_tag_real_id = self.tokenizer.encode(f"{STEP_TAG_REAL}")[-1]
         good_token_id = self.tokenizer.encode(f"{GOOD_TOKEN}")[-1]
         bad_token_id = self.tokenizer.encode(f"{BAD_TOKEN}")[-1]
         
-        
         num_responses = len(data["response_N"])
-        for start_idx in range(0, num_responses, batch_sze):
+        real_batch_size = min(num_responses, self.batch_sze)
+        for start_idx in range(0, num_responses, real_batch_size):
             # Get the current batch
-            end_idx = min(start_idx + batch_sze, num_responses)
+            end_idx = min(start_idx + real_batch_size, num_responses)
             batch_responses = data["response_N"][start_idx:end_idx]
             self.get_verifier_scores(
                 data["prompt"], 
@@ -211,11 +210,16 @@ class Verifier:
 
 
 if __name__ == "__main__":
-    setup_logging()
-    model_name_or_path = "/data/tangbo/plms/Qwen2.5-7B-Instruct/"
-    lora_weights = "/data/youxiang/repos/RiskReasoner/models/RiskPRM"
     
-    verifier = Verifier(model_name_or_path, lora_weights)
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    
+    setup_logging()
+    # model_name_or_path = "/data/youxiang/huggingface/Qwen2.5-7B-Instruct"
+    # lora_weights = "/data/youxiang/repos/RiskReasoner/models/RiskPRM"
+    
+    model_name_or_path = "models/RiskPRM_v2_full"
+    
+    verifier = Verifier(model_name_or_path, lora_weights=None)
     verifier.start_verifier()
     
     data = {
@@ -240,23 +244,24 @@ if __name__ == "__main__":
     
     responses = []
     data_with_scores = []
-    data_tb_verified = jload("datasets/posterior/test_balanced_posterior_generator_200.json")
-    for data in tqdm(data_tb_verified, desc="Processing data..."):
+    data_tb_verified = jload("datasets/generator/test_balanced_posterior_generator_cot_N.json")
+    for i, data in enumerate(data_tb_verified): #, desc="Processing data..."):
         response_best, data_scored = verifier.verify(data, save_N=True)
         responses.append(response_best)
         data_with_scores.append(data_scored)
-        
+    
+    # save the whole reranked data including the prompts
     jdump(
         data_with_scores,
-        "datasets/verified/test_balanced_posterior_generator_200_responses_all.json"
+        "datasets/verified/test_balanced_posterior_generator_cot_N_data_with_scores.json"
         )
     
+    # save the best responses
     jdump(
         responses,
-        "datasets/verified/test_balanced_posterior_generator_200_responses.json"
+        "datasets/verified/test_balanced_posterior_generator_cot_N_best_responses.json"
     )
     logging.info("Data saved successfully")
     
     metrics = compute_binary_metrics_from_results(responses)
     logging.info(f"Evaluation on the verifier-reranked results: {metrics}")
-    print(1)
