@@ -89,8 +89,8 @@ def split_questions_uniformly(input_filepath: str, output_directory: str, num_fi
 # Example usage
 if __name__ == "__main__":
     split_questions_uniformly(
-        "/data/youxiang/repos/RiskReasoner/datasets/posterior/train_posterior_sampled.json", 
-        "datasets/posterior/split_output", 
+        "/data/youxiang/repos/RiskReasoner/datasets/posterior/test_balanced_posterior.json", 
+        "datasets/posterior/split_output_test_balanced_posterior", 
         4
         )
 #

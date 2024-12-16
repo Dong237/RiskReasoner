@@ -18,10 +18,10 @@ MASTER_ADDR=${MASTER_ADDR:-localhost}
 # The port for communication
 MASTER_PORT=${MASTER_PORT:-6001}
 
-MODEL="/data/tangbo/plms/Qwen2.5-7B-Instruct-GPTQ-Int8"
-DATA="datasets/omegaPRM/risk_reasoner_v1.json"
-OUTPUT_DIR="models/RiskPRM"
-DS_CONFIG_PATH="omegaPRM/prm/ds_config_zero2.json"
+MODEL="/data/youxiang/huggingface/Qwen2.5-7B-Instruct" # "/data/tangbo/plms/Qwen2.5-7B-Instruct-GPTQ-Int8"
+DATA="datasets/omegaPRM_v2/risk_reasoner_v2.jsonl"
+OUTPUT_DIR="models/RiskPRM_v2_full"
+DS_CONFIG_PATH="omegaPRM/prm/ds_config_zero3.json"
 WANDB_KEY="e28afd6154b7ecd865dde62fead55bba5994bc9a"
 
 DISTRIBUTED_ARGS="\
@@ -43,7 +43,7 @@ torchrun $DISTRIBUTED_ARGS omegaPRM/prm/step_level_qwen.py \
     --data_path $DATA \
     --bf16 True \
     --output_dir $OUTPUT_DIR \
-    --num_train_epochs 5 \
+    --num_train_epochs 3 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 8 \
     --gradient_accumulation_steps 4 \
@@ -61,8 +61,8 @@ torchrun $DISTRIBUTED_ARGS omegaPRM/prm/step_level_qwen.py \
     --lr_scheduler_type "cosine" \
     --model_max_length 2048 \
     --gradient_checkpointing \
-    --use_lora \
     --deepspeed ${DS_CONFIG_PATH}
+    # --use_lora \
     # --key $WANDB_KEY \
     # --use_wandb True \
     # --wandb_run_name "prm-run1" \

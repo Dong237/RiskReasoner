@@ -1,4 +1,4 @@
-from generator_cot_N import Generator
+from inference.sys2.generator_cot_N import Generator
 from transformers import HfArgumentParser
 
 import logging

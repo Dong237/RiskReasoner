@@ -214,12 +214,13 @@ if __name__ == "__main__":
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
     
     setup_logging()
-    # model_name_or_path = "/data/youxiang/huggingface/Qwen2.5-7B-Instruct"
-    # lora_weights = "/data/youxiang/repos/RiskReasoner/models/RiskPRM"
+    model_name_or_path = "/data/tangbo/plms/Qwen2.5-7B-Instruct-GPTQ-Int8" # "/data/youxiang/huggingface/Qwen2.5-7B-Instruct"
+    lora_weights = "/data/youxiang/repos/RiskReasoner/models/RiskPRM"
     
-    model_name_or_path = "models/RiskPRM_v2_full"
+    # model_name_or_path = "models/RiskPRM_v2_full"
+    # lora_weights = None
     
-    verifier = Verifier(model_name_or_path, lora_weights=None)
+    verifier = Verifier(model_name_or_path, lora_weights=lora_weights)
     verifier.start_verifier()
     
     data = {
