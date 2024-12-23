@@ -5,7 +5,6 @@ torch.cuda.empty_cache()
 import logging
 from tqdm import tqdm
 from typing import Literal, List
-from utils.helper import jdump
 from inference.base import BaseGenerator
 
 
@@ -38,25 +37,27 @@ class GeneratorCoT(BaseGenerator):
             record_ids = [item["id"] for item in batch]
 
             # Make predictions for the batch
-            batch_results = self._batch_predict( 
+            batch_results = self.batch_predict( 
                 prompts, 
                 choices_batch, 
                 record_ids, 
                 gold_labels,
                 real_batch_size,
+                model=self.model, # using single device, just pass in self.model 
                 )
 
             # Append batch results to overall results
             results.extend(batch_results)
         return results
     
-    def _batch_predict(
+    def batch_predict(
         self,
         prompt_batch, 
         choices_batch, 
         record_ids, 
         gold_labels, 
         real_batch_size,
+        model=None,
         return_prompt=True,
         ):
         
@@ -65,7 +66,7 @@ class GeneratorCoT(BaseGenerator):
         """
         model_inputs, generated_dict = self.generate_for_batch(
             prompt_batch, 
-            self.model, 
+            model, 
             self.tokenizer, 
             self.generation_strategy
             )
@@ -74,8 +75,8 @@ class GeneratorCoT(BaseGenerator):
         results = []
         for idx in range(real_batch_size):
             # Make prediction
-            probs, pred_label, response = self._predict_token_and_probs(
-                self.model,
+            probs, pred_label, response = self.predict_token_and_probs(
+                model,
                 self.tokenizer,
                 model_inputs, 
                 generated_dict, 
@@ -90,13 +91,14 @@ class GeneratorCoT(BaseGenerator):
                 "pred_prob": probs,
                 "pred_label": pred_label,
                 "gold_label": gold_labels[idx],
-                "prompt": prompt_batch[idx] if return_prompt else None
             }
-            results.append(result)
+            if return_prompt:
+                result["prompt"] = prompt_batch[idx]
 
+            results.append(result)
         return results
     
-    def _predict_token_and_probs(
+    def predict_token_and_probs(
         self,
         model, 
         tokenizer, 
@@ -157,8 +159,8 @@ class GeneratorCoT(BaseGenerator):
             # To clean up the matched text, this is vital!
             matched_text = matched_text.replace(self.step_tag, "").replace("\n", "").replace("*", "") # get rid of possible '*' to get clean ids later
             pred_token = matched_text.split(":")[-1] 
-            
-            good_token_id, bad_token_id = self._get_tokens_id(
+            # Get the token ids for good/bad tokens respectively based on the format of the pred token.
+            good_token_id, bad_token_id = self.get_tokens_id(
                 tokenizer, good_token, bad_token, pred_token
                 )
             
@@ -173,7 +175,7 @@ class GeneratorCoT(BaseGenerator):
                     )["input_ids"].to(model.device)
                 # FIXME during index matching below, I skip over the first token since its variant is quite complicated
                 # and unstable. But luckily, there are always more than 2 matched tokens in the list so this should be fine.
-                indices = self._find_continuous_indices(matched_generated_ids[0][1:], generated_ids)
+                indices = self.find_continuous_indices(matched_generated_ids[0][1:], generated_ids)
                 try:
                     target_logits = generated_logits[indices[-1]][idx]
                 except:
@@ -197,7 +199,7 @@ class GeneratorCoT(BaseGenerator):
 
 
 if __name__ == "__main__":
-    os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
     # Create a sample data dictionary
     data = [
     {
@@ -232,4 +234,5 @@ if __name__ == "__main__":
     )
     
     results = generator(data)
-    jdump(results, "result_cot.json")
+    generator.save(results, "result_cot.json")
+    print("Final data saved")

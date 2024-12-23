@@ -62,7 +62,7 @@ class BaseGenerator:
         raise NotImplementedError
     
     ### Making prediction for a single input
-    def _predict_token_and_probs(self, *args, **kwargs):
+    def predict_token_and_probs(self, *args, **kwargs):
         """Predict the classification token and probabilities of the two tokens by processing logits"""
         raise NotImplementedError
     
@@ -83,7 +83,7 @@ class BaseGenerator:
             variations.append(f"{leading_space}{case}{trailing_space}")
         return variations
 
-    def _get_tokens_id(self, tokenizer, good_token, bad_token, pred_token):
+    def get_tokens_id(self, tokenizer, good_token, bad_token, pred_token):
         """
         Given the two tokens from ``choices`` and the predicted token,
         get the corresponding token ids. The ids of the two binary tokens
@@ -102,7 +102,7 @@ class BaseGenerator:
         return good_token_id, bad_token_id
 
     @staticmethod
-    def _find_continuous_indices(tensor_pattern, tensor_sequence):
+    def find_continuous_indices(tensor_pattern, tensor_sequence):
         """
         Finds the starting indices of a continuous subsequence (tensor_pattern) 
         in a given sequence (tensor_sequence).
@@ -125,11 +125,11 @@ class BaseGenerator:
     
     ### Loading Model and Tokenizer
     def start_service(self):
-        self.model = self._load_model_to_device(device=None)
-        self.tokenizer = self._load_tokenizer()
+        self.model = self.load_model_to_device(device=None)
+        self.tokenizer = self.load_tokenizer()
         logging.info("Model and tokenizer loaded successfully.")
 
-    def _load_model_to_device(self, device: int):
+    def load_model_to_device(self, device: int):
         logging.info("Loading model...")
         if device:
             device_map = f"cuda:{device}"
@@ -145,7 +145,7 @@ class BaseGenerator:
             model = PeftModel.from_pretrained(model, self.lora_weights) 
         return model
     
-    def _load_tokenizer(self):
+    def load_tokenizer(self):
         logging.info("Loading tokenizer...")
         tokenizer = AutoTokenizer.from_pretrained(
             self.model_name_or_path,
@@ -167,11 +167,11 @@ class BaseGenerator:
         strategy: Literal["greedy", "sampling"],
         return_inputs: bool = True
         ):
-        model_inputs = self._get_batch_model_inputs(prompt_batch, model, tokenizer)
+        model_inputs = self.get_batch_model_inputs(prompt_batch, model, tokenizer)
         with torch.no_grad():
             generated_dict = self.model.generate(
                 **model_inputs,
-                generation_config=self._get_generation_config(
+                generation_config=self.get_generation_config(
                     strategy=strategy
                     ),
                 return_dict_in_generate=True,
@@ -183,7 +183,7 @@ class BaseGenerator:
         else:
             return generated_dict
     
-    def _get_batch_model_inputs(self, prompt_batch, model, tokenizer):
+    def get_batch_model_inputs(self, prompt_batch, model, tokenizer):
         # Prepare the batch prompts
         messages = [
             [
@@ -210,7 +210,7 @@ class BaseGenerator:
             ).to(model.device)
         return model_inputs
     
-    def _get_generation_config(self, strategy=Literal["greedy", "sampling"]):
+    def get_generation_config(self, strategy=Literal["greedy", "sampling"]):
         if strategy == "greedy":
             generation_config = GenerationConfig(
                 temperature=None,     
