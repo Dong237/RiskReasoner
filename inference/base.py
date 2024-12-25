@@ -231,7 +231,6 @@ class BaseGenerator:
             raise ValueError(f"Invalid generation strategy: {strategy}")
         return generation_config
     
-
     ## Save and Load data
     def save(self, data: List[dict], path: str):
         jdump(data, path)
@@ -240,3 +239,5 @@ class BaseGenerator:
     def load(self, path: str):
         data = jload(path)
         return data
+    
+    # TODO allow real-time jsonl data saving
