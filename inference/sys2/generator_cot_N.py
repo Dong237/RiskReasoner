@@ -1,6 +1,7 @@
 import os
 import torch
 torch.cuda.empty_cache()
+import logging
 from tqdm import tqdm
 from typing import Literal, Optional, List
 from inference.sys1.generator_cot import GeneratorCoT
@@ -25,21 +26,13 @@ class GeneratorCoTN(GeneratorCoT):
     
     def generate(self, data_all: List[dict]):
         if self.cuda_visible_devices:
-            self.load_tokenizer()
-            
-            # TODO try multiprocessing to speed up the generation process
-            # put model on different GPUs and pass them as arguments
-            visible_devices = [int(device) for device in self.cuda_visible_devices.split(",")]
-            num_devices = len(visible_devices)
-            
-            # Split data into chunks based on the number of devices and test multiprocessing
             pass
         else:
+            # No multi-GPU scenario
             self.start_service()
-            # Generate sequantially with self.model
             data_tb_verified = self._generate_for_all_questions(self.model, data_all)
         return data_tb_verified
-
+            
     def _generate_for_all_questions(self, model, data_all: List[dict]):
         data_tb_verified = []
         for data in tqdm(data_all, desc="Processing all questions..."):
@@ -55,15 +48,20 @@ class GeneratorCoTN(GeneratorCoT):
         choices = data["choices"] 
         gold_label = data["gold"]        
         
-        results = self.batch_predict(
-            prompt_batch=[prompt] * self.N, 
-            choices_batch=[choices]*self.N, 
-            record_ids=list(range(self.N)),
-            gold_labels=[gold_label]*self.N, 
-            real_batch_size=self.N,
-            model=model,
-            return_prompt=False,
-            )
+        div, rem = divmod(self.N, self.batch_size)
+        batch_schedule = [self.batch_size] * div + ([rem] if rem else [])
+        results = []
+        for batch_size in batch_schedule:
+            results_batch = self.batch_predict(
+                prompt_batch=[prompt] * batch_size, 
+                choices_batch=[choices]*batch_size, 
+                record_ids=list(range(batch_size)),
+                gold_labels=[gold_label]*batch_size, 
+                real_batch_size=batch_size,
+                model=model,
+                return_prompt=False,
+                )
+            results.extend(results_batch)
     
         return {
             "prompt": prompt,
@@ -72,7 +70,7 @@ class GeneratorCoTN(GeneratorCoT):
      
 
 if __name__ == "__main__":
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    
     # Create a sample data dictionary
     data = [
     {
@@ -101,11 +99,24 @@ if __name__ == "__main__":
     }
     ]
 
+    os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+    num = 3
+    folder = "datasets/posterior/split_output_test_balanced_posterior"
+    file = f"questions_part_{num}.json"
+    output_dir = f"datasets/generator/test_balanced_posterior_generator_cot_N_sft_{num}.json"
+    
     generator = GeneratorCoTN(
         model_name_or_path="/data/youxiang/huggingface/Qwen2.5-7B-Instruct", 
-        N=2,
-        max_new_tokens=4096, # unlike GeneratorCoT, 2048 is somehow too small for GeneratorCoTN
+        N=16,
+        batch_size=16,
+        max_new_tokens=2048, # unlike GeneratorCoT, 2048 is somehow too small for GeneratorCoTN
+        lora_weights="models/sft_3epochs"
         )
+    
+    data_path = os.path.join(folder, file)
+    data = generator.load(os.path.join(folder, file))
+    logging.info(f"Loaded data from {data_path}")
+    
     results = generator(data)
-    generator.save(results, "results_cot_N.json")
-    print("Final data saved")
+    generator.save(results, output_dir)
+    print(f"Final data saved to {output_dir}")
