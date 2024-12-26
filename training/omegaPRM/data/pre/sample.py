@@ -37,7 +37,6 @@ def compare_labels_and_store_ids(json_data):
             ids_incorrect.append(row_id)
     return ids_incorrect, ids_correct
 
-
 def sample_train_data(train_correct, train_incorrect):
     """Sample an equal number of rows from train_correct as train_incorrect."""
     return train_correct.sample(n=len(train_incorrect), random_state=42)
