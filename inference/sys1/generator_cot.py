@@ -89,7 +89,7 @@ class GeneratorCoT(BaseGenerator):
                 "id": record_ids[idx],
                 "reasoning_steps": response,
                 "pred_prob": probs,
-                "pred_label": int(pred_label),
+                "pred_label": pred_label,  # pred_label is integer or string "miss"
                 "gold_label": int(gold_labels[idx]), # ensure data type consistency
             }
             if return_prompt:
