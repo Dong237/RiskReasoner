@@ -80,8 +80,8 @@ class Generator(BaseGenerator):
                     "id": record_ids[i],
                     "prompt": prompt_batch[i], 
                     "pred_prob": [good_probs[i], bad_probs[i]], 
-                    "pred_label": labels[i], 
-                    "gold_label": gold_labels[i]
+                    "pred_label": int(labels[i]), 
+                    "gold_label": int(gold_labels[i])
                     }
             )
         return results

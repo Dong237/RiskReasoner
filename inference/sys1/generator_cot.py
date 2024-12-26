@@ -89,8 +89,8 @@ class GeneratorCoT(BaseGenerator):
                 "id": record_ids[idx],
                 "reasoning_steps": response,
                 "pred_prob": probs,
-                "pred_label": pred_label,
-                "gold_label": gold_labels[idx],
+                "pred_label": int(pred_label),
+                "gold_label": int(gold_labels[idx]), # ensure data type consistency
             }
             if return_prompt:
                 result["prompt"] = prompt_batch[idx]
@@ -230,9 +230,11 @@ if __name__ == "__main__":
     
     generator = GeneratorCoT(
         model_name_or_path="/data/youxiang/huggingface/Qwen2.5-7B-Instruct",
-        batch_size=1,
+        batch_size=32,
     )
     
+    data = generator.load("datasets/posterior/train_posterior.json")
+    
     results = generator(data)
-    generator.save(results, "result_cot.json")
+    generator.save(results, "datasets/generator/train_posterior_generator_cot.json")
     print("Final data saved")
