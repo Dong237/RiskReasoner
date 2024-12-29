@@ -21,33 +21,33 @@ The resources I recommand to have a better understanding of the ways to achieve 
 
 ## Quick Tour into repo
 
-``preprocessor``: contains scripts for preprocessing data for the RiskReasoner
+1. ``preprocessor``: contains scripts for preprocessing data for the RiskReasoner
 
- - ``prior.py``: process data needed for establishing baselines (e.g., expert systems, LLMs of direct inference)
- - ``posterior.py``: add ML predictions to prompts for LLMs as reference (therefore "posterior" in the name)
+    - ``prior.py``: process data needed for establishing baselines (e.g., expert systems, LLMs of direct inference)
+    - ``posterior.py``: add ML predictions to prompts for LLMs as reference (therefore "posterior" in the name)
 
-``inference``: contains scripts for inference with the RiskReasoner
+2. ``inference``: contains scripts for inference with the RiskReasoner
 
- - ``base.py``: base class for all inference methods (generators, not expert systems / ML systems)
+    - ``base.py``: base class for all inference methods (generators, not expert systems / ML systems)
 
- - ``sys1``: contains reasoning methods that require no thinking
-   - ``expert_systems.py``: baseline using traditional ML methods
-   - ``generator.py``: LLM-based inference, classification results are generated directly
-   - ``generator_cot.py``: LLM-based inference, classification results are generated after a CoT process. This is still considered system 1 reasoning since the responses are generated in a autoregressive manner without pausing.
+    - ``sys1``: contains reasoning methods that require no thinking
+      - ``expert_systems.py``: baseline using traditional ML methods
+      - ``generator.py``: LLM-based inference, classification results are generated directly
+      - ``generator_cot.py``: LLM-based inference, classification results are generated after a CoT process. This is still considered system 1 reasoning since the responses are generated in a autoregressive manner without pausing.
 
- - ``sys2``: contains reasoning methods that require thinking (or pauses)
-   - ``generator_cot_N.py``: LLM-based inference, the model generates N different responses for each question, and the responses are to be compared/verified by a verifier to find the best one. The generation processing itself is not strictly system 2 reasoning, but the compound system will be to some extent since the system appears to pause to think (e.g., during verification.)
-   - ``verifier.py``: LLM-based verifier, for results generated from ``generator_cot_N.py``. The model required for this is trained as introduced by [this work](https://arxiv.org/pdf/2305.20050), data is synthesized as the [OmegaPRM paper](https://arxiv.org/pdf/2406.06592)
+    - ``sys2``: contains reasoning methods that require thinking (or pauses)
+      - ``generator_cot_N.py``: LLM-based inference, the model generates N different responses for each question, and the responses are to be compared/verified by a verifier to find the best one. The generation processing itself is not strictly system 2 reasoning, but the compound system will be to some extent since the system appears to pause to think (e.g., during verification.)
+      - ``verifier.py``: LLM-based verifier, for results generated from ``generator_cot_N.py``. The model required for this is trained as introduced by [this work](https://arxiv.org/pdf/2305.20050), data is synthesized as the [OmegaPRM paper](https://arxiv.org/pdf/2406.06592)
 
-``training``: contains training scripts for the verifier (a process-supervised reward model, or PRM), and the [ReFT method](https://arxiv.org/pdf/2401.08967) for finetuning the generator (not completely identical yet)
+3. ``training``: contains training scripts for the verifier (a process-supervised reward model, or PRM), and the [ReFT method](https://arxiv.org/pdf/2401.08967) for finetuning the generator (not completely identical yet)
 
- - ``omegaPRM``: contains the scripts for training the verifier, the scripts are from [openr framework](https://github.com/openreasoner/openr/tree/main/data/omegaPRM_v2) with some modifications
+    - ``omegaPRM``: contains the scripts for training the verifier, the scripts are from [openr framework](https://github.com/openreasoner/openr/tree/main/data/omegaPRM_v2) with some modifications
 
- - ``sft``: contains the scripts for finetuning the generator using SFT, also acts as the warm-up stage in the ReFT method
+    - ``sft``: contains the scripts for finetuning the generator using SFT, also acts as the warm-up stage in the ReFT method
 
- - ``rl``: right now, only contains the scripts for finetuning the generator using PPO, which is the seconda stage of the ReFT method.
+    - ``rl``: right now, only contains the scripts for finetuning the generator using PPO, which is the seconda stage of the ReFT method.
 
-    **Note** I have not finished the ReFT method as it should be yet, and the SFT and PPO finetunings are seperate for now.
+      **Note** I have not finished the ReFT method as it should be yet, and the SFT and PPO finetunings are seperate for now.
 
 ## In the future
 
