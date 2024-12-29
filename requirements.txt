@@ -11,3 +11,4 @@ transformers==4.45.2
 xgboost==2.1.2
 scikit-learn==1.5.2
 trl==0.10.1
+bitsandbytes
