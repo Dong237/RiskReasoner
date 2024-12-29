@@ -400,7 +400,7 @@ def train():
         cache_dir=training_args.cache_dir,
         trust_remote_code=True,
     )
-    config.use_cache = False # TODO: why set it to false?
+    config.use_cache = False # use_cache = True interferes with gradient checkpointing
 
     # Load model and tokenizer
     model = transformers.AutoModelForCausalLM.from_pretrained(
