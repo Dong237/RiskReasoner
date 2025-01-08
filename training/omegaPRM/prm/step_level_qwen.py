@@ -324,44 +324,44 @@ def make_supervised_data_module(
     train_dataset = dataset_cls(train_data, tokenizer=tokenizer, max_len=max_len)
     return dict(train_dataset=train_dataset, eval_dataset=eval_dataset)
 
+def compute_metrics(eval_pred, good_token_id, bad_token_id):
+    # logits: [batch_size, seq_len, vocab_size]
+    # labels: [batch_size, seq_len]
+    logits, labels = eval_pred
 
-# def compute_metrics(eval_pred):
-#     """Compute evaluation metrics."""
-#     preds, labels = eval_pred
-#     auc = roc_auc_score(labels, preds[:, 1])
-#     ll = log_loss(labels, preds)
-#     acc = accuracy_score(labels, preds > 0.5)
-#     return {"auc": auc, "log_loss": ll, "accuracy": acc}
+    # Reshape logits and labels to flatten the batch and sequence dimensions
+    logits = logits.reshape(-1, logits.shape[-1])  # Shape: [batch_size * seq_len, vocab_size]
+    labels = labels.reshape(-1)  # Shape: [batch_size * seq_len]
 
-def compute_metrics(eval_pred):
-    pre, labels = eval_pred
-    auc = roc_auc_score(pre[1], pre[0])
-    ll = log_loss(pre[1], pre[0])
-    acc = accuracy_score(pre[1], pre[0] > 0.5)
-    result ={
-        'auc': auc, 
-        'll': ll, 
-        'acc': acc, 
-    } 
-    return result
+    # Create a mask for tokens that are either GOOD_TOKEN or BAD_TOKEN
+    mask = (labels == good_token_id) | (labels == bad_token_id)
 
-# def preprocess_logits_for_metrics(logits, labels, CANDIDATE_TOKENS):
-#     """Preprocess logits for custom metrics computation."""
-#     indices = torch.nonzero(
-#         (labels == CANDIDATE_TOKENS[0]) | (labels == CANDIDATE_TOKENS[1]), as_tuple=True
-#     )
-#     gold_labels = (labels[indices[0], indices[1]] == CANDIDATE_TOKENS[0]).long()
-#     step_logits = logits[indices[0], indices[1]][:, [CANDIDATE_TOKENS[1], CANDIDATE_TOKENS[0]]]
-#     return torch.softmax(step_logits, dim=-1)[:, 1], gold_labels
+    # Apply the mask to filter relevant logits and labels
+    filtered_logits = logits[mask]  # Shape: [num_relevant_tokens, vocab_size]
+    filtered_labels = labels[mask]  # Shape: [num_relevant_tokens]
 
+    # Convert labels to binary (0 for BAD_TOKEN, 1 for GOOD_TOKEN)
+    gold = (filtered_labels == good_token_id).astype(int)  # Shape: [num_relevant_tokens]
 
-# Wrapping preprocess_logits_for_metrics to include candidate_tokens
-def preprocess_logits_for_metrics(logits, labels, good_token_id, bad_token_id):
-    labels_index = torch.argwhere(torch.bitwise_or(labels == good_token_id, labels == bad_token_id))
-    gold = torch.where(labels[labels_index[:, 0], labels_index[:, 1]] == bad_token_id, 0, 1)
-    logits = logits[labels_index[:, 0], labels_index[:, 1]][:, [bad_token_id, good_token_id]]
-    prob = torch.softmax(logits, dim=-1)
-    return prob[:, 1], gold
+    # Compute probabilities for the GOOD_TOKEN
+    # Extract logits for GOOD_TOKEN and BAD_TOKEN only
+    relevant_logits = filtered_logits[:, [bad_token_id, good_token_id]]  # Shape: [num_relevant_tokens, 2]
+    prob = torch.softmax(torch.tensor(relevant_logits), dim=-1)[:, 1].numpy()  # Shape: [num_relevant_tokens]
+
+    # Compute metrics
+    try:
+        auc = roc_auc_score(gold, prob)
+    except ValueError as e:
+        auc = 0.0
+        logging.warning("AUC is set to 0.0 due to error:", e)
+    ll = log_loss(gold, prob)
+    acc = accuracy_score(gold, prob > 0.5)
+
+    return {
+        'auc': auc,
+        'll': ll,
+        'acc': acc,
+    }
 
 
 def train():
@@ -521,12 +521,12 @@ def train():
     
     good_token_id = tokenizer.encode(f"{GOOD_TOKEN}")[-1]
     bad_token_id = tokenizer.encode(f"{BAD_TOKEN}")[-1]
-    preprocess_logits_for_metrics_partial = functools.partial(
-        preprocess_logits_for_metrics,
+    compute_metrics_partial = functools.partial(
+        compute_metrics,
         good_token_id=good_token_id,
         bad_token_id=bad_token_id,
-        )
-    # Starting the trainner
+    )
+    # Starting the trainer
     trainer = Trainer(
         model=model, 
         tokenizer=tokenizer, 
@@ -534,8 +534,7 @@ def train():
         train_dataset=data_module["train_dataset"],
         eval_dataset=data_module["eval_dataset"],
         data_collator=data_collator,
-        # preprocess_logits_for_metrics=preprocess_logits_for_metrics_partial,
-        # compute_metrics=compute_metrics,
+        # compute_metrics=compute_metrics_partial, # FIXME: this leads to CUDA OOM every time
     )
 
     trainer.train()
