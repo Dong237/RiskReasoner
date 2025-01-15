@@ -99,8 +99,8 @@ if __name__ == "__main__":
     }
     ]
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = "3"
-    num = 3
+    os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+    num = 1
     folder = "datasets/posterior/split_output_test_balanced_posterior"
     file = f"questions_part_{num}.json"
     output_dir = f"datasets/generator/test_balanced_posterior_generator_cot_N_sft_{num}.json"
@@ -108,9 +108,9 @@ if __name__ == "__main__":
     generator = GeneratorCoTN(
         model_name_or_path="/data/youxiang/huggingface/Qwen2.5-7B-Instruct", 
         N=16,
-        batch_size=16,
-        max_new_tokens=2048, # unlike GeneratorCoT, 2048 is somehow too small for GeneratorCoTN
-        lora_weights="models/sft_3epochs"
+        batch_size=8,
+        max_new_tokens=4096, # unlike GeneratorCoT, 2048 is somehow too small for GeneratorCoTN
+        lora_weights="models/ppo/SparseRM" # "models/sft_3epochs"
         )
     
     data_path = os.path.join(folder, file)
