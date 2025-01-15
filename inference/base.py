@@ -157,7 +157,6 @@ class BaseGenerator:
             )
         return tokenizer
     
-    
     ### Batch Generation
     def generate_for_batch(
         self, 
