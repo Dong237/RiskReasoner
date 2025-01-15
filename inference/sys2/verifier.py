@@ -8,7 +8,12 @@ from functools import reduce
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from utils.constants import Prompts, SPLIT_TOKEN, STEP_TAG
-from utils.helper import jload, jdump, compute_binary_metrics_from_results, setup_logging
+from utils.helper import (
+    jload, 
+    jdump, 
+    setup_logging,
+    compute_binary_metrics_from_results
+)
 
 SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING.value
 INSTRUCTION = Prompts.INSTRUCTION_STEP_BY_STEP.value
@@ -169,10 +174,9 @@ class Verifier:
             "prompt": data["prompt"],
             "reasoning_steps": response_best["reasoning_steps"],
             "pred_label": response_best["pred_label"],
-            "pred_prob": [float(prob) for prob in response_best["probs"]],  # get the prob for "good"
+            "pred_prob": [float(prob) for prob in response_best["pred_prob"]],  # get the prob for "good"
             "label": response_best["gold_label"],
             "solution_level_score": response_best["solution_level_score"],
-            
         }
         return response_best_keys_adapted, data_scored
     
@@ -214,8 +218,8 @@ if __name__ == "__main__":
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
     
     setup_logging()
-    model_name_or_path = "/data/tangbo/plms/Qwen2.5-7B-Instruct-GPTQ-Int8" # "/data/youxiang/huggingface/Qwen2.5-7B-Instruct"
-    lora_weights = "/data/youxiang/repos/RiskReasoner/models/RiskPRM"
+    model_name_or_path = "/data/tangbo/plms/Qwen2.5-7B-Instruct-GPTQ-Int8" # "/data/youxiang/huggingface/Qwen2.5-7B-Instruct"  # 
+    lora_weights = "models/RiskPRM"
     
     # model_name_or_path = "models/RiskPRM_v2_full"
     # lora_weights = None
@@ -245,8 +249,8 @@ if __name__ == "__main__":
     
     responses = []
     data_with_scores = []
-    data_tb_verified = jload("datasets/generator/test_balanced_posterior_generator_cot_N.json")
-    for i, data in enumerate(data_tb_verified): #, desc="Processing data..."):
+    data_tb_verified = jload("datasets/generator/test_balanced_posterior_generator_cot_N_sft.json")
+    for data in tqdm(data_tb_verified, desc="Processing data..."):
         response_best, data_scored = verifier.verify(data, save_N=True)
         responses.append(response_best)
         data_with_scores.append(data_scored)
@@ -254,13 +258,13 @@ if __name__ == "__main__":
     # save the whole reranked data including the prompts
     jdump(
         data_with_scores,
-        "datasets/verified/test_balanced_posterior_generator_cot_N_data_with_scores.json"
+        "datasets/verified/test_balanced_posterior_generator_cot_N_sft_data_with_scores.json"
         )
     
     # save the best responses
     jdump(
         responses,
-        "datasets/verified/test_balanced_posterior_generator_cot_N_best_responses.json"
+        "datasets/verified/test_balanced_posterior_generator_cot_N_sft_best_responses.json"
     )
     logging.info("Data saved successfully")
     
