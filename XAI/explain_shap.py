@@ -146,29 +146,22 @@ def demonstrate_shap(
     testing_data,
     feature_columns,
     label_col="Loan Status",
-    num_samples_to_explain=5
+    draw_dependence=False
 ):
     """
-    Demonstrate SHAP by explaining a random subset of the test data.
-
+    Demonstrate SHAP by explaining the entire test dataset.
+    
     Args:
         model: A trained (scikit-learn compatible) model that supports .predict()/.predict_proba().
         training_data (pd.DataFrame): The full training dataset (for reference, if needed).
         testing_data (pd.DataFrame): The test dataset.
         feature_columns (list[str]): The feature names used in training.
         label_col (str): The name of the target column.
-        num_samples_to_explain (int): How many test samples to use for SHAP explanations.
+        draw_dependence (bool): Whether to draw the dependence plot for the most impactful feature.
     """
-    import random
-
     # Extract feature matrix and labels from test set
     X_test = testing_data[feature_columns]
     y_test = testing_data[label_col]
-
-    # We'll select a random subset from the test set
-    num_samples_to_explain = min(num_samples_to_explain, len(X_test))
-    subset_indices = random.sample(range(len(X_test)), num_samples_to_explain)
-    X_subset = X_test.iloc[subset_indices]
 
     # Initialize SHAP
     # - If your model is tree-based (RandomForest, XGBoost, LightGBM), you can often use TreeExplainer.
@@ -181,9 +174,101 @@ def demonstrate_shap(
         explainer = shap.Explainer(model, X_test)  # for linear or generic models
         logging.info("Using generic Explainer for a non-tree model.")
 
-    # Compute SHAP values for the subset
-    shap_values = explainer(X_subset)
+    # Compute SHAP values for the entire test set
+    shap_values = explainer(X_test)
 
-    # For classification tasks, SHAP may produce multiple columns in shap_values.values
-    # We'll show a summary plot for the 'most likely' or 'first' class, or you can specify an index.
-    # * shap_values
+    # 1) Summary Plot
+    logging.info("Generating SHAP summary plot for the test dataset.")
+    shap.summary_plot(shap_values, X_test)
+
+    # 2) If draw_dependence is True, plot the dependence plot for the most impactful feature
+    if draw_dependence:
+        # Get the feature with the largest mean absolute SHAP value
+        mean_abs_shap_values = np.abs(shap_values.values).mean(axis=0)
+        most_impactful_feature_idx = np.argmax(mean_abs_shap_values)
+        most_impactful_feature = feature_columns[most_impactful_feature_idx]
+        
+        logging.info(f"Most impactful feature: {most_impactful_feature}")
+        shap.dependence_plot(most_impactful_feature, shap_values.values, X_test)
+
+
+# ---------------------------------------------------------------------------
+# Main script
+# ---------------------------------------------------------------------------
+def main():
+    """
+    1. Parse arguments
+    2. Load data
+    3. Load JSON of model results
+    4. Select best model
+    5. Retrain best model
+    6. Demonstrate SHAP interpretability for the test dataset
+    """
+    parser = argparse.ArgumentParser(description="Demonstrate SHAP on the best model.")
+    parser.add_argument("--training_data_path", type=str, required=True,
+                        help="Path to the training data (parquet)")
+    parser.add_argument("--testing_data_path", type=str, required=True,
+                        help="Path to the testing data (parquet)")
+    parser.add_argument("--metrics_json_path", type=str, required=True,
+                        help="Path to the JSON file containing metrics and hyperparams")
+    parser.add_argument("--output_metric", type=str, default="ROC_AUC",
+                        help="Metric to select the best model (e.g., ROC_AUC, accuracy, etc.)")
+    parser.add_argument("--draw_dependence", type=bool, default=False,
+                        help="Whether to draw dependence plot for the most impactful feature")
+
+    args = parser.parse_args()
+
+    # Set up logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[logging.StreamHandler()]
+    )
+    logging.info("Starting SHAP interpretability demonstration script")
+
+    # 1. Load Data
+    training_data, testing_data = load_data(args.training_data_path, args.testing_data_path)
+    # Preprocess or encode the data the same way as your main training process
+    training_data, testing_data, mappings = preprocess_combined_data(
+        training_data,
+        testing_data,
+        threshold=0,
+        return_mapping=True
+    )
+
+    # 2. Load JSON of model results
+    logging.info("Loading model results from JSON: %s", args.metrics_json_path)
+    with open(args.metrics_json_path, 'r') as f:
+        expert_systems_results = json.load(f)
+
+    # 3. Select the best model based on the chosen metric
+    best_model_info = select_best_model(expert_systems_results, args.output_metric)
+    logging.info(
+        "Best model found: %s with %s=%.4f",
+        best_model_info["model"],
+        args.output_metric,
+        best_model_info[args.output_metric]
+    )
+
+    # 4. Retrain the best model on the entire training data
+    best_model, feature_columns = retrain_best_model(
+        best_model_info,
+        training_data,
+        label_col="Loan Status"
+    )
+
+    # 5. Demonstrate SHAP interpretability on the test dataset
+    demonstrate_shap(
+        model=best_model,
+        training_data=training_data,
+        testing_data=testing_data,
+        feature_columns=feature_columns,
+        label_col="Loan Status",
+        draw_dependence=args.draw_dependence
+    )
+
+    logging.info("SHAP interpretability demonstration completed.")
+
+
+if __name__ == "__main__":
+    main()

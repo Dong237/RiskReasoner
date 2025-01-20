@@ -11,7 +11,7 @@
 #       - Testing data path
 #       - Metrics JSON path
 #       - Output metric (the metric to select the best model)
-#       - Number of test samples to explain with SHAP
+#       - Whether to draw a dependence plot
 # -----------------------------------------------------------------------------
 
 # Define your paths and parameters here
@@ -19,7 +19,7 @@ TRAINING_DATA_PATH="datasets/prior/experts/train_expert.parquet"
 TESTING_DATA_PATH="datasets/prior/experts/test_expert_balanced.parquet" 
 METRICS_JSON_PATH="results/expert_systems/expert_systems_balanced.json"
 OUTPUT_METRIC="ROC_AUC"       # e.g., ROC_AUC, accuracy, F1_score, etc.
-NUM_SAMPLES_TO_EXPLAIN=5      # How many test samples to explain with SHAP
+DRAW_DEPENDENCE=True     
 
 # Call the Python script
 python explain_shap.py \
@@ -27,4 +27,4 @@ python explain_shap.py \
     --testing_data_path "${TESTING_DATA_PATH}" \
     --metrics_json_path "${METRICS_JSON_PATH}" \
     --output_metric "${OUTPUT_METRIC}" \
-    --num_samples_to_explain "${NUM_SAMPLES_TO_EXPLAIN}"
+    --draw_dependence "${DRAW_DEPENDENCE}"
