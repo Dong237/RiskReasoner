@@ -1,4 +1,5 @@
 
+import math
 import numpy as np
 import torch
 import torch.nn as nn
@@ -223,7 +224,8 @@ class APPOTrainer:
         # ------------------------- Policy Update ------------------------- #
         # Zero gradients for the policy optimizer
         self.policy_optimizer.zero_grad()
-        cp_batch_size = int(batch_size // self.gradient_cp_steps)
+        assert batch_size >= self.gradient_cp_steps, "Batch size must be greater than or equal to gradient checkpointing steps"
+        cp_batch_size = max(int(batch_size // self.gradient_cp_steps), self.gradient_cp_steps)
         total_approx_kl = 0
         
         # Iterate over the batch in chunks for gradient checkpointing
@@ -233,7 +235,8 @@ class APPOTrainer:
             # Obtain new log probabilities and entropy from the current policy
             log_prob_infer, entropy = self.agent.infer_for_action_update(
                 np.concatenate(obs_batch[start:end]), 
-                action_tokens_batch[start:end].view(-1, action_tokens_batch.shape[-1])
+                action_tokens_batch[start:end].view(-1, action_tokens_batch.shape[-1]),
+                batch_infer=True
                 )
 
             # Reshape log probabilities
@@ -312,7 +315,7 @@ class APPOTrainer:
             # obs_batch, action_batch, log_prob_batch, value_preds_batch, 
             # return_batch, advantages_batch, action_tokens_batch
             data_generator = buffer.appo_sampler(self.mini_batch_size)
-            for sample in data_generator:
+            for i, sample in enumerate(data_generator):
                 # Perform PPO update on the sampled minibatch
                 value_loss, value_grad_norm, policy_loss, policy_grad_norm = self.ppo_update(sample)
                 
