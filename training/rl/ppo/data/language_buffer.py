@@ -238,7 +238,7 @@ class LanguageBuffer(object):
         rand = np.arange(batch_size)
         # FIXME change it back 
         # np.random.shuffle(rand)
-        sampler = [rand[i * mini_batch_size:(i + 1) * mini_batch_size] for i in range(num_mini_batch)]
+        sampler = [rand[i:i + mini_batch_size] for i in range(0, batch_size, mini_batch_size)]
 
         # keep (num_agent, dim)
         obs = self.obs[:-1].reshape(-1, *self.obs.shape[2:])
