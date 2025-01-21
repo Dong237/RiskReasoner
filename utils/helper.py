@@ -75,34 +75,34 @@ def load_dataset(dataset_path):
 
 
 ## Logging
-def setup_logging():
-    # Set up file handler
-    file_handler = logging.FileHandler("app.log")  
+def setup_logging(log_file="app.log"):
+    # Set up file handler with full timestamp format
+    file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(
-        logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(message)s"
-            )
-        )
+        logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    )
 
-    # Set up color console handler using colorlog
+    # Set up color console handler with colorlog, but include timestamp in color handler
     color_handler = colorlog.StreamHandler()
-    color_handler.setFormatter(colorlog.ColoredFormatter(
-        "%(log_color)s%(levelname)s: %(message)s",
-        log_colors={
-            "DEBUG": "blue",
-            "INFO": "green",
-            "WARNING": "yellow",
-            "ERROR": "red",
-            "CRITICAL": "bold_red",
-        }
-    ))
+    color_handler.setFormatter(
+        colorlog.ColoredFormatter(
+            "%(log_color)s%(asctime)s - %(levelname)s - %(message)s",
+            log_colors={
+                "DEBUG": "blue",
+                "INFO": "green",
+                "WARNING": "yellow",
+                "ERROR": "red",
+                "CRITICAL": "bold_red",
+            }
+        )
+    )
 
     # Configure the root logger
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)  # Set the lowest log level to capture all messages
     logger.addHandler(file_handler)
     logger.addHandler(color_handler)
-    
+   
     
 ## Processing dataframes for fitting expert systems
 import pandas as pd
