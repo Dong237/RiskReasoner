@@ -370,6 +370,12 @@ class QwenLoRAgent:
         entropies = torch.stack(entropies)
         return action_log_probs, entropies
     
+    def tokenize_obs(self, obs):
+        obs_token_seq = self.tokenizer(obs.tolist(), return_tensors="pt", padding=True)
+        obs_input_ids = obs_token_seq.input_ids.to(self.device)
+        obs_attn_mask = obs_token_seq.attention_mask.to(self.device)
+        return obs_input_ids, obs_attn_mask
+    
     @torch.no_grad()
     def infer_for_rollout(self, obs):
         """
@@ -386,9 +392,7 @@ class QwenLoRAgent:
                 - values (np.ndarray[float]): Value estimates.
                 - log_probs (np.ndarray[float]): Log probabilities of the actions.
         """
-        obs_token_seq = self.tokenizer(obs.tolist(), return_tensors="pt", padding=True)
-        obs_input_ids = obs_token_seq.input_ids.to(self.device)
-        obs_attn_mask = obs_token_seq.attention_mask.to(self.device)
+        obs_input_ids, obs_attn_mask = self.tokenize_obs(obs)
         actions, action_tokens = self.get_actions(obs_input_ids, obs_attn_mask)
         
         if self.algo == "APPO":
@@ -418,7 +422,12 @@ class QwenLoRAgent:
         elif self.algo == "GRPO":
             # A simpler variant without a critic
             values = np.zeros((obs.shape[0],)) # fake values, grpo does not use critic
-            action_log_probs, _ = self.get_joint_action_log_probs(obs, action_tokens, batch_infer=True)
+            action_log_probs, _ = self.get_joint_action_log_probs(
+                obs_input_ids, 
+                obs_attn_mask, 
+                action_tokens, 
+                batch_infer=True
+                )
             action_tokens = action_tokens.int().cpu().numpy()
             log_probs = action_log_probs.float().cpu().numpy()
         else:
@@ -458,18 +467,22 @@ class QwenLoRAgent:
         Returns:
             np.ndarray: Value predictions in numpy format.
         """
+        
+        obs_token_seq = self.tokenizer(obs.tolist(), return_tensors="pt", padding=True)
+        obs_input_ids = obs_token_seq.input_ids.to(self.device)
+        obs_attn_mask = obs_token_seq.attention_mask.to(self.device)
+        
         if self.algo == "APPO":
-            values = self.get_action_values(obs)
+            values = self.get_action_values(obs_input_ids, obs_attn_mask)
             values = values.cpu().float().numpy()
-            return values
         elif self.algo == "TPPO":
             values = self.get_next_tppo_values(obs).squeeze(-1)
             values = values.cpu().float().numpy()
-            return values
         elif self.algo == "GRPO":
-            return np.zeros((obs.shape[0],)) # fake values, grpo does not use critic
+            values = np.zeros((obs.shape[0],)) # fake values, grpo does not use critic
         else: 
             raise NotImplementedError
+        return values
         
     def infer_for_action_update(self, obs, action_tokens= None):
         """
@@ -489,7 +502,12 @@ class QwenLoRAgent:
             AssertionError: If action_tokens is None.
         """
         assert action_tokens is not None, "action_tokens could not be none"
-        action_log_probs, entropies = self.get_joint_action_log_probs(obs, action_tokens)
+        obs_input_ids, obs_attn_mask = self.tokenize_obs(obs)
+        action_log_probs, entropies = self.get_joint_action_log_probs(
+            obs_input_ids, 
+            obs_attn_mask, 
+            action_tokens
+            )
         return action_log_probs, entropies
     
     def infer_for_token_update(self, obs, action_tokens):
