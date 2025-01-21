@@ -3,6 +3,7 @@ import torch
 import logging
 import numpy as np
 from peft import PeftModel
+from safetensors.torch import save_file
 from torch.distributions.categorical import Categorical
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from training.rl.ppo.models.critic import APPOCritic, TPPOCritic
@@ -160,7 +161,7 @@ class QwenLoRAgent:
             attention_mask=obs_attn_mask,
             do_sample=True,
             top_k=50,
-            temperature=1.0,
+            temperature=0.8,
             max_new_tokens=self.max_new_tokens,
             # 1802: "и", 16748: "ки", 198: "\n", 624: ".\n", 715: " \n", 271: "\n\n", 76325: " \n\n\n\n\n"
             # eos_token_id=[self.tokenizer.eos_token_id, self.tokenizer.pad_token_id, 198, 624, 715, 271, 76325], 
@@ -484,7 +485,7 @@ class QwenLoRAgent:
             raise NotImplementedError
         return values
         
-    def infer_for_action_update(self, obs, action_tokens= None):
+    def infer_for_action_update(self, obs, action_tokens= None, batch_infer=False):
         """
         Computes log probabilities and entropies for a batch of (obs, action_tokens),
         typically used for policy gradient updates.
@@ -506,7 +507,8 @@ class QwenLoRAgent:
         action_log_probs, entropies = self.get_joint_action_log_probs(
             obs_input_ids, 
             obs_attn_mask, 
-            action_tokens
+            action_tokens,
+            batch_infer=batch_infer,
             )
         return action_log_probs, entropies
     
@@ -566,22 +568,22 @@ class QwenLoRAgent:
         return actions
 
     def save(self, save_dir, episode):
-        """
-        Saves the LoRA-adapted actor model (and optionally the critic) to disk.
-
-        Args:
-            save_dir (str): Directory path where the model should be saved.
-            episode (int): Current training episode number, used in naming the checkpoint.
-        """
         print("save model")
         exp_path = os.path.join(save_dir, "episode_{:04d}".format(episode))
 
         os.makedirs(exp_path, exist_ok=True)
-        # save lora
-        self.actor.save_pretrained(exp_path)
-        # save critic
-        # if self.algo != "GRPO":
-        #     torch.save(self.critic.v_head.state_dict(), os.path.join(exp_path, "critic.pth"))
+        # Save lora adapter_config.json
+        self.actor.save_pretrained(exp_path, )
+
+        # Save lora weights, since the above method leads to an empty file
+        lora_weights = {}
+        for name, param in self.actor.named_parameters():
+            if "lora" in name:  # 假设参数名称中包含 'lora' 来表示 LoRA 参数
+                lora_weights[name] = param.data
+
+        # Save the LoRA weights to a file
+        save_file(lora_weights, exp_path + "/adapter_model.safetensors")
+        logging.info(f"Saved LoRA weights to {exp_path}/adapter_model.safetensors")
 
     def load(self, save_dir):
         """
