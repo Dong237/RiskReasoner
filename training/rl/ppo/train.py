@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import sys
 import os
+import logging
 import numpy as np
 from pathlib import Path
 import torch
@@ -24,6 +25,11 @@ def parse_args(args, parser):
         '--dataset_path', 
         type=str, 
         help="Path to the dataset file."
+    )
+    parser.add_argument(
+        '--n_agents', 
+        type=int, 
+        default=1
     )
     parser.add_argument(
         '--model_name_or_path', 
@@ -68,7 +74,14 @@ def parse_args(args, parser):
     all_args = parser.parse_known_args(args)[0]
     return all_args
     
-def make_vec_env(dataset_name, dataset_path, n_rollout_threads, mode, prm, seed=42):
+def make_vec_env(
+    dataset_name, 
+    dataset_path, 
+    n_rollout_threads, 
+    mode, 
+    max_step, 
+    seed=42
+    ):
     def get_env_fn(rank):
         def init_env():
             env = RiskEnv(
@@ -76,6 +89,7 @@ def make_vec_env(dataset_name, dataset_path, n_rollout_threads, mode, prm, seed=
                 dataset_name=dataset_name, 
                 dataset_path=dataset_path, 
                 mode=mode,
+                max_step=max_step,
                 )
             env.set_seed(seed + rank * 5000)
             return env
@@ -120,7 +134,6 @@ def build_run_dir(all_args):
     return run_dir
 
 def set_seed(seed):
-    print("Setting random seed to {seed}")
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
@@ -137,6 +150,7 @@ def main(args):
         all_args.dataset_path, 
         all_args.n_rollout_threads, 
         "train", 
+        all_args.episode_length,  # episodes will be forced to stop at this length
         all_args.seed
         )
     
@@ -145,6 +159,7 @@ def main(args):
         all_args.dataset_path, 
         all_args.n_eval_rollout_threads, 
         "test", 
+        all_args.episode_length,
         all_args.seed
         )
 
@@ -157,8 +172,11 @@ def main(args):
     }
 
     runner = RiskRunner(config)
+    logging.info("Starting training")
     runner.run()
-
+    logging.info("Finished training")
+    
+    logging.info("Writting TensorBoard logs")
     runner.writter.export_scalars_to_json(str(runner.log_dir + '/summary.json'))
     runner.writter.close()
 

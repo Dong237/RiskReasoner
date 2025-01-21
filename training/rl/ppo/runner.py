@@ -1,7 +1,9 @@
 import os
-import numpy as np
-from functools import reduce
 import torch
+import logging
+import numpy as np
+from tqdm import tqdm
+from functools import reduce
 from tensorboardX import SummaryWriter
 from training.rl.ppo.models.prm import ProcessRM
 from training.rl.ppo.agents.agent import QwenLoRAgent
@@ -147,30 +149,29 @@ class RiskRunner:
         self.buffer.obs[0] = obs.copy()
 
         # Calculate the number of episodes based on total environment steps
-        episodes = int(self.num_env_steps) // self.episode_length // self.n_rollout_threads
+        episodes = 1 # int(self.num_env_steps) // self.episode_length // self.n_rollout_threads
         
         episodic_returns = []
-        for episode in range(episodes):
+        for episode in tqdm(range(episodes), desc='Rollout:'):
             total_num_steps = (episode + 1) * self.episode_length * self.n_rollout_threads  
             for step in range(self.episode_length):
                 # Sample actions
                 values, actions, action_tokens, log_probs = self.collect(step)
                 
-                # output rewards
+                # Output rewards
                 rewards = self.prm.get_reward(obs, actions)
-
-                # obs here should actually be called obs_next
-                # FIXME the last obs in the episode has chaotic strings, please check later
+                
+                # Step the environments
                 obs, dones, infos = self.envs.step(actions)
 
-                # insert data into buffer
-                data = obs, rewards, dones, values, actions, action_tokens, log_probs
-                self.insert(data)
+                # Insert data into buffer
+                self.insert((obs, rewards, dones, values, actions, action_tokens, log_probs))
                 
+                # TODO how to stop the episode for the certain env
                 for i in range(self.n_rollout_threads):
                     if dones[i, 0]:
                         episodic_returns.append(rewards[i, 0])
-
+                
             # compute return and update network
             self.before_update()
             train_infos = self.trainer.train(self.buffer)      
@@ -182,8 +183,8 @@ class RiskRunner:
 
             # log information
             if episode % self.log_interval == 0:
-                print("total_num_steps: ", total_num_steps)
-                print("average_step_rewards: ", np.mean(self.buffer.rewards))
+                logging.info("total_num_steps: ", total_num_steps)
+                logging.info("average_step_rewards: ", np.mean(self.buffer.rewards))
                 train_infos["average_step_rewards"] = np.mean(self.buffer.rewards)
                 train_infos["average_currect_rate"] = np.mean(episodic_returns)
                 self.log_infos(train_infos, total_num_steps)
