@@ -134,6 +134,9 @@ class ProcessRM(nn.Module):
         # Combine each templated question with the updated second_part + actions
         input_texts = []
         for (first_part, second_part), question, action_str in zip(splitted_data, questions, actions_list):
+            # The last step may have no step tag, so we need to add it
+            if not action_str.endswith(self.step_tag):
+                action_str += self.step_tag
             # Append the action to the second part
             second_part += action_str
             second_part = second_part.replace(self.step_tag, self.step_tag_real)
