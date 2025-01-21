@@ -550,8 +550,6 @@ class QwenLoRAgent:
             # top_k=50,
             # temperature=0.5,
             max_new_tokens=self.max_new_tokens,
-            # bos_token_id=self.tokenizer.pad_token_id,
-            # 1802: "и", 16748: "ки", 198: "\n", 624: ".\n", 715: " \n", 271: "\n\n", 76325: " \n\n\n\n\n"
             eos_token_id=[self.tokenizer.eos_token_id, self.tokenizer.pad_token_id, 198, 624, 715, 271, 76325], 
             pad_token_id=self.tokenizer.pad_token_id,
             return_dict_in_generate=True,
@@ -578,7 +576,7 @@ class QwenLoRAgent:
         # Save lora weights, since the above method leads to an empty file
         lora_weights = {}
         for name, param in self.actor.named_parameters():
-            if "lora" in name:  # 假设参数名称中包含 'lora' 来表示 LoRA 参数
+            if "lora" in name:  
                 lora_weights[name] = param.data
 
         # Save the LoRA weights to a file
@@ -594,9 +592,6 @@ class QwenLoRAgent:
         """
         print("load model")
         self.actor = self._init_actor(save_dir).to(self.device)
-        # critic_weights = os.path.join(save_dir, "critic.pth")
-        # if self.algo != "GRPO":
-        #     self.critic = self._init_critic(critic_weights).to(self.device)
 
     def train(self):
         """
