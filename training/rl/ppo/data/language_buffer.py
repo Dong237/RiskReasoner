@@ -223,22 +223,17 @@ class LanguageBuffer(object):
                     self.tppo_returns[step, thread, :, token] = gae + v
                     self.tppo_advantages[step, thread, :, token] = gae
                 
-    def appo_sampler(self, num_mini_batch=None, mini_batch_size=None):
+    def appo_sampler(self, mini_batch_size=None):
         """
         Yield training data batches for the APPO algorithm.
         
         Args:
-            num_mini_batch (int, optional): Number of minibatches to split the batch into. Defaults to None.
             mini_batch_size (int, optional): Number of samples in each minibatch. If None, calculated based on `num_mini_batch`. Defaults to None.
         
         Yields:
             tuple: A tuple containing batches of (obs, actions, log_prob, value_preds, returns, advantages, action_tokens).
         """
         batch_size = self.n_rollout_threads * self.episode_length
-
-        if mini_batch_size is None:
-            assert batch_size >= num_mini_batch
-            mini_batch_size = batch_size // num_mini_batch
 
         rand = np.arange(batch_size)
         # FIXME change it back 

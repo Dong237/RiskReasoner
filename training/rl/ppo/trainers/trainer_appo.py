@@ -18,7 +18,7 @@ class APPOTrainer:
         agent (Agent): The agent containing the actor and critic models.
         clip_param (float): Clipping parameter for PPO.
         ppo_epoch (int): Number of PPO epochs per training iteration.
-        num_mini_batch (int): Number of minibatches per PPO epoch.
+        mini_batch_size (int): Mini batch size per PPO epoch.
         value_loss_coef (float): Coefficient for scaling the value loss.
         max_grad_norm (float): Maximum gradient norm for clipping.
         huber_delta (float): Delta parameter for the Huber loss.
@@ -43,7 +43,7 @@ class APPOTrainer:
                 Expected attributes include:
                     - clip_param (float)
                     - ppo_epoch (int)
-                    - num_mini_batch (int)
+                    - mini_batch_size (int)
                     - value_loss_coef (float)
                     - max_grad_norm (float)
                     - huber_delta (float)
@@ -64,7 +64,7 @@ class APPOTrainer:
         # Hyperparameters and settings
         self.clip_param = args.clip_param
         self.ppo_epoch = args.ppo_epoch
-        self.num_mini_batch = args.num_mini_batch
+        self.mini_batch_size = args.mini_batch_size
         self.value_loss_coef = args.value_loss_coef
         self.max_grad_norm = args.max_grad_norm       
         self.huber_delta = args.huber_delta
@@ -192,7 +192,8 @@ class APPOTrainer:
         # ------------------------- Critic Update ------------------------- #
         # Obtain new value predictions from the critic
         # NOTE value_preds and value_infer could be a bit different even before critic model gets updated
-        values_infer = self.agent.get_action_values(np.concatenate(obs_batch))
+        obs_input_ids, obs_attn_mask = self.agent.tokenize_obs(np.concatenate(obs_batch))
+        values_infer = self.agent.get_action_values(obs_input_ids, obs_attn_mask)
         values_infer = values_infer.view(batch_size, -1)
         
         # Calculate value loss
@@ -310,7 +311,7 @@ class APPOTrainer:
             # Obtain a generator (7 elements contained) for minibatches
             # obs_batch, action_batch, log_prob_batch, value_preds_batch, 
             # return_batch, advantages_batch, action_tokens_batch
-            data_generator = buffer.appo_sampler(self.num_mini_batch)
+            data_generator = buffer.appo_sampler(self.mini_batch_size)
             for sample in data_generator:
                 # Perform PPO update on the sampled minibatch
                 value_loss, value_grad_norm, policy_loss, policy_grad_norm = self.ppo_update(sample)

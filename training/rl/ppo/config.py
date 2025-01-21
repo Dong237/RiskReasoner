@@ -90,8 +90,8 @@ def get_config():
             by default, clip loss value. If set, do not clip loss value.
         --clip_param <float>
             ppo clip parameter (default: 0.2)
-        --num_mini_batch <int>
-            number of batches for ppo (default: 1)
+        --mini_batch_size <int>
+            mini batch size for ppo (default: 1)
         --entropy_coef <float>
             entropy term coefficient (default: 0.01)
         --use_max_grad_norm 
@@ -234,8 +234,8 @@ def get_config():
                         action='store_false', default=True, help="by default, clip loss value. If set, do not clip loss value.")
     parser.add_argument("--clip_param", type=float, default=0.2,
                         help='ppo clip parameter (default: 0.2)')
-    parser.add_argument("--num_mini_batch", type=int, default=4,
-                        help='number of batches for ppo (default: 1)')
+    parser.add_argument("--mini_batch_size", type=int, default=4,
+                        help='mini batch size for ppo (default: 1)')
     parser.add_argument("--entropy_coef", type=float, default=0.01,
                         help='entropy term coefficient (default: 0.01)')
     parser.add_argument("--value_loss_coef", type=float,
