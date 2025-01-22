@@ -5,6 +5,7 @@ import netrc
 import jsonlines
 import logging
 import colorlog
+import pandas as pd
 from sklearn.metrics import (
     roc_auc_score, 
     precision_recall_curve, 
@@ -13,6 +14,7 @@ from sklearn.metrics import (
     roc_curve,
     accuracy_score
 )
+from sklearn.preprocessing import LabelEncoder
 
 
 ## file handling
@@ -105,8 +107,6 @@ def setup_logging(log_file="app.log"):
    
     
 ## Processing dataframes for fitting expert systems
-import pandas as pd
-from sklearn.preprocessing import LabelEncoder
 LABEL = "Loan Status"  # Global variable for the target column
 def preprocess_combined_data(train_data, test_data, threshold=5, return_mapping=False):
     """
