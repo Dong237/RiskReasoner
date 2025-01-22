@@ -4,6 +4,7 @@
 # hyperparameters. Includes argument parsing, environment variable usage,
 # date-logging, and optional log-file redirection.
 ###############################################################################
+export CUDA_VISIBLE_DEVICES=1
 
 # Exit on error (e), treat unset variables as errors (u), and fail on any command
 # in a pipeline that fails (o pipefail).
@@ -166,7 +167,7 @@ fi
 ###############################################################################
 # 5. Run the Training Script
 ###############################################################################
-python train.py \
+python training/rl/ppo/train.py \
     --dataset_name "$DATASET_NAME" \
     --dataset_path "$DATASET_PATH" \
     --model_name_or_path "$MODEL_NAME_OR_PATH" \
