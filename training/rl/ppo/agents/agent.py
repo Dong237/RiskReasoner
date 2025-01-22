@@ -14,6 +14,7 @@ from peft import (
     prepare_model_for_kbit_training,
     set_peft_model_state_dict,
 )
+from utils.constants import POSSIBLE_END_TOKENS
 
 
 class QwenLoRAgent:
@@ -48,6 +49,7 @@ class QwenLoRAgent:
             )
         # TODO: figure out why use this pad_token_id
         self.tokenizer.pad_token_id = 151655 # "<|image_pad|>"
+        self.possible_end_token_ids = [self.tokenizer.encode(token)[0] for token in POSSIBLE_END_TOKENS]
         
         logging.info(f"Loading base model for actor and critic...")
         self.base_model = AutoModelForCausalLM.from_pretrained(
@@ -163,9 +165,10 @@ class QwenLoRAgent:
             top_k=50,
             temperature=0.8,
             max_new_tokens=self.max_new_tokens,
-            # 1802: "и", 16748: "ки", 198: "\n", 624: ".\n", 715: " \n", 271: "\n\n", 76325: " \n\n\n\n\n"
-            # eos_token_id=[self.tokenizer.eos_token_id, self.tokenizer.pad_token_id, 198, 624, 715, 271, 76325], 
-            eos_token_id=[self.tokenizer.eos_token_id, self.tokenizer.pad_token_id, 271, 382, 1447, 4710], 
+            # 1802: "и", 16748: "ки", 198: "\n", 624: ".\n", 715: " \n", 76325: " \n\n\n\n\n"
+            eos_token_id=self.possible_end_token_ids + [
+                self.tokenizer.eos_token_id, self.tokenizer.pad_token_id
+                ],
             pad_token_id=self.tokenizer.pad_token_id,
             return_dict_in_generate=True,
         )

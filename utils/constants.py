@@ -11,6 +11,8 @@ SPLIT_TOKEN = "Final assessment"
 # namely when ** is between "good" and "assessment", but this is a flaw I am not smart enough to balance
 SEARCH_PATTERN = r"\s*\*?\*?Final\s*[Aa]ssessment\*?\*?\s*:\s*(good|bad)\*?\*?"
 
+# possible end tokens when inferencing with Qwen2.5-7B
+POSSIBLE_END_TOKENS = ['\n   \n', '\n  \n', '\n \n', '\n\n', '.\n\n', ':\n\n', ' \n\n']
 
 class Prompts(Enum):
     # System Prompts
