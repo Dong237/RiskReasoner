@@ -570,7 +570,6 @@ class QwenLoRAgent:
         return actions
 
     def save(self, save_dir, episode):
-        print("save model")
         exp_path = os.path.join(save_dir, "episode_{:04d}".format(episode))
 
         os.makedirs(exp_path, exist_ok=True)
