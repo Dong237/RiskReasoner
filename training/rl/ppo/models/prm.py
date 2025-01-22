@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torch import nn
 from peft import PeftModel
-from utils.constants import Prompts, STEP_TAG
+from utils.constants import Prompts, STEP_TAG, POSSIBLE_END_TOKENS
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
@@ -19,6 +19,7 @@ class ProcessRM(nn.Module):
         self.bad_token = '-'
         self.step_tag = STEP_TAG
         self.step_tag_real = "ки" 
+        self.step_tag_real_space = " ки" 
         self.instruction = Prompts.INSTRUCTION_STEP_BY_STEP.value
         self.system_prompt = Prompts.SYSTEM_PROMPT_CREDIT_SCORING.value
 
@@ -34,6 +35,7 @@ class ProcessRM(nn.Module):
             ) 
         # NOTE openR implementation used to encode " ки" (with space), I changed it in my setting
         self.step_tag_real_id = self.tokenizer.encode(self.step_tag_real)[-1] 
+        self.step_tag_real_id_space = self.tokenizer.encode(self.step_tag_real_space)[-1] 
         logging.info("Loading PRM...")
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name_or_path, 
@@ -65,7 +67,11 @@ class ProcessRM(nn.Module):
         
         step_scores = []
         for i in range(np.shape(score)[0]):
-            step_score = score[i][input_ids["input_ids"][i] == self.step_tag_real_id]
+            pos = torch.logical_or(
+                input_ids["input_ids"][i] == self.step_tag_real_id,
+                input_ids["input_ids"][i] == self.step_tag_real_id_space
+            )
+            step_score = score[i][pos]
             last_step_score = step_score[-1]  # NOTE interestingly, only last step score is taken as the reward
             step_scores.append([last_step_score.item()])
         step_scores = np.array(step_scores)
@@ -135,7 +141,13 @@ class ProcessRM(nn.Module):
         input_texts = []
         for (first_part, second_part), question, action_str in zip(splitted_data, questions, actions_list):
             # The last step may have no step tag, so we need to add it
-            if not action_str.endswith(self.step_tag):
+            matching_suffix = next(
+                (suffix for suffix in POSSIBLE_END_TOKENS if action_str.endswith(suffix)), 
+                None
+                )
+            if matching_suffix:
+                action_str = action_str.replace(matching_suffix, self.step_tag)
+            else:
                 action_str += self.step_tag
             # Append the action to the second part
             second_part += action_str
