@@ -1,3 +1,10 @@
+"""
+The main script for finetuning an LLM with PPO.
+
+Readers of interest can refer to this blog post: https://www.notion.so/swtheking/eb7b2d1891f44b3a84e7396d19d39e6f?v=01bcb084210149488d730064cbabc99f
+for common tricks during PPO finetuning.
+"""
+
 #!/usr/bin/env python
 import sys
 import os
@@ -80,7 +87,6 @@ def make_vec_env(
     n_rollout_threads, 
     mode, 
     max_step, 
-    seed=42
     ):
     def get_env_fn(rank):
         def init_env():
@@ -91,7 +97,6 @@ def make_vec_env(
                 mode=mode,
                 max_step=max_step,
                 )
-            env.set_seed(seed + rank * 5000)
             return env
         return init_env
     return ShareSubprocVecEnv(
@@ -132,17 +137,11 @@ def build_run_dir(all_args):
     
     # Return the complete path to the current run directory
     return run_dir
-
-def set_seed(seed):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    np.random.seed(seed)
     
 def main(args):
     setup_logging()
     parser = get_config()
     all_args = parse_args(args, parser)
-    set_seed(all_args.seed)
     run_dir = build_run_dir(all_args)
 
     envs = make_vec_env(
@@ -151,7 +150,6 @@ def main(args):
         all_args.n_rollout_threads, 
         "train", 
         all_args.episode_length,  # episodes will be forced to stop at this length
-        all_args.seed
         )
     
     eval_envs = make_vec_env(
@@ -160,7 +158,6 @@ def main(args):
         all_args.n_eval_rollout_threads, 
         "test", 
         all_args.episode_length,
-        all_args.seed
         )
 
     config = {

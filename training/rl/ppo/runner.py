@@ -149,25 +149,26 @@ class RiskRunner:
         self.buffer.obs[0] = obs.copy()
 
         # Calculate the number of episodes based on total environment steps
-        episodes = 1 # int(self.num_env_steps) // self.episode_length // self.n_rollout_threads
+        episodes = int(self.num_env_steps) // self.episode_length // self.n_rollout_threads
         
         episodic_returns = []
         for episode in tqdm(range(episodes), desc='Rollout:'):
             total_num_steps = (episode + 1) * self.episode_length * self.n_rollout_threads  
-            for step in range(self.episode_length):
+            for step in tqdm(range(self.episode_length), desc=f'Step in Episode {episode}:'):
                 # Sample actions
                 values, actions, action_tokens, log_probs = self.collect(step)
                 
                 # Output rewards
-                rewards = self.prm.get_reward(obs, actions)
+                rewards = self.prm.get_reward(obs, actions)                
                 
                 # Step the environments
                 obs, dones, infos = self.envs.step(actions)
 
                 # Insert data into buffer
-                self.insert((obs, rewards, dones, values, actions, action_tokens, log_probs))
+                self.insert(
+                    (obs, rewards, dones, values, actions, action_tokens, log_probs)
+                    )
                 
-                # TODO how to stop the episode for the certain env
                 for i in range(self.n_rollout_threads):
                     if dones[i, 0]:
                         episodic_returns.append(rewards[i, 0])
@@ -183,8 +184,8 @@ class RiskRunner:
 
             # log information
             if episode % self.log_interval == 0:
-                logging.info("total_num_steps: ", total_num_steps)
-                logging.info("average_step_rewards: ", np.mean(self.buffer.rewards))
+                logging.info(f"total_num_steps: {total_num_steps}")
+                logging.info(f"average_step_rewards: {np.mean(self.buffer.rewards)}")
                 train_infos["average_step_rewards"] = np.mean(self.buffer.rewards)
                 train_infos["average_currect_rate"] = np.mean(episodic_returns)
                 self.log_infos(train_infos, total_num_steps)
