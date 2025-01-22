@@ -153,7 +153,7 @@ class RiskRunner:
         episodes = int(self.num_env_steps) // self.episode_length // self.n_rollout_threads
         
         episodic_returns = []
-        for episode in range(episodes):
+        for episode in tqdm(range(episodes), desc="Rollout:"):
             total_num_steps = (episode + 1) * self.episode_length * self.n_rollout_threads  
             for step in tqdm(range(self.episode_length), desc=f'Collecting data for Episode {episode}:'):
                 # Sample actions
