@@ -77,6 +77,7 @@ class RiskRunner:
         self.eval_interval = self.all_args.eval_interval
         self.save_interval = self.all_args.save_interval
         self.algo = self.all_args.algorithm_name
+        self.rollout_infer_batch_size = self.all_args.rollout_infer_batch_size
 
         # Directory setup for logging and saving models
         self.run_dir = config["run_dir"]
@@ -152,9 +153,9 @@ class RiskRunner:
         episodes = int(self.num_env_steps) // self.episode_length // self.n_rollout_threads
         
         episodic_returns = []
-        for episode in tqdm(range(episodes), desc='Rollout:'):
+        for episode in range(episodes):
             total_num_steps = (episode + 1) * self.episode_length * self.n_rollout_threads  
-            for step in tqdm(range(self.episode_length), desc=f'Step in Episode {episode}:'):
+            for step in tqdm(range(self.episode_length), desc=f'Collecting data for Episode {episode}:'):
                 # Sample actions
                 values, actions, action_tokens, log_probs = self.collect(step)
                 
@@ -175,7 +176,7 @@ class RiskRunner:
                 
             # compute return and update network
             self.before_update()
-            train_infos = self.trainer.train(self.buffer)      
+            train_infos_episode = self.trainer.train(self.buffer)      
             self.buffer.after_update()
             
             # save model
@@ -184,11 +185,11 @@ class RiskRunner:
 
             # log information
             if episode % self.log_interval == 0:
-                logging.info(f"total_num_steps: {total_num_steps}")
-                logging.info(f"average_step_rewards: {np.mean(self.buffer.rewards)}")
-                train_infos["average_step_rewards"] = np.mean(self.buffer.rewards)
-                train_infos["average_currect_rate"] = np.mean(episodic_returns)
-                self.log_infos(train_infos, total_num_steps)
+                logging.info(f"total num steps: {total_num_steps}")
+                logging.info(f"average step rewards for the episode {episode}: {np.mean(self.buffer.rewards)}")
+                train_infos_episode["average_step_rewards"] = np.mean(self.buffer.rewards)
+                train_infos_episode["average_episodic_returns"] = np.mean(episodic_returns)
+                self.log_infos(train_infos_episode, total_num_steps)
                 episodic_returns = []
 
             # eval
@@ -213,7 +214,8 @@ class RiskRunner:
         """
         # Obtain behavior data from the agent
         actions, action_tokens, values, log_probs = self.agent.infer_for_rollout(
-            np.concatenate(self.buffer.obs[step])
+            np.concatenate(self.buffer.obs[step]),
+            batch_infer_size=self.rollout_infer_batch_size,
             )
         
         # Split the data across rollout threads

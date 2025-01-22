@@ -2,6 +2,7 @@
 import math
 import numpy as np
 import torch
+from tqdm import tqdm
 import torch.nn as nn
 import torch.nn.functional as F
 from training.utils import get_grad_norm, huber_loss, mse_loss
@@ -236,7 +237,7 @@ class APPOTrainer:
             log_prob_infer, entropy = self.agent.infer_for_action_update(
                 np.concatenate(obs_batch[start:end]), 
                 action_tokens_batch[start:end].view(-1, action_tokens_batch.shape[-1]),
-                batch_infer=True
+                batch_infer_size=cp_batch_size
                 )
 
             # Reshape log probabilities
@@ -309,7 +310,7 @@ class APPOTrainer:
         train_info['policy_grad_norm'] = 0
 
         update_time = 0
-        for _ in range(self.ppo_epoch):
+        for _ in tqdm(range(self.ppo_epoch), desc="Running PPO Epoch:"):
             
             # Obtain a generator (7 elements contained) for minibatches
             # obs_batch, action_batch, log_prob_batch, value_preds_batch, 

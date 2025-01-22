@@ -25,7 +25,8 @@ PRM_TYPE="Qwen"
 PRM_MODEL_NAME_OR_PATH="/data1/huggingface/Qwen2.5-7B-Instruct"
 PRM_LORA_WEIGHTS="model_weights/RiskPRM_v3_lora"
 ALGO="APPO"
-MINI_BATCH_SIZE=4
+MINI_BATCH_SIZE=2           # batch size during ppo training
+ROLLOUT_INFER_BATCH_SIZE=4  # inference batch size during each rollout 
 PPO_EPOCH=3
 NUM_ENV_STEPS=100000
 EPISODE_LENGTH=25
@@ -146,6 +147,7 @@ echo "Model Path: $MODEL_NAME_OR_PATH"
 echo "PRM: $PRM_TYPE, $PRM_MODEL_NAME_OR_PATH, LoRA: $PRM_LORA_WEIGHTS"
 echo "Algorithm: $ALGO"
 echo "Mini-Batch: $MINI_BATCH_SIZE, PPO Epoch: $PPO_EPOCH"
+echo "Inference batch at rollout: $ROLLOUT_INFER_BATCH_SIZE"
 echo "Num Env Steps: $NUM_ENV_STEPS, Episode Length: $EPISODE_LENGTH"
 echo "Max New Tokens: $MAX_NEW_TOKENS, Model Max Length: $MODEL_MAX_LENGTH"
 echo "Rollout Threads: $N_ROLLOUT_THREADS"
@@ -176,6 +178,7 @@ python training/rl/ppo/train.py \
     --prm_lora_weights "$PRM_LORA_WEIGHTS" \
     --algorithm_name "$ALGO" \
     --mini_batch_size "$MINI_BATCH_SIZE" \
+    --rollout_infer_batch_size "$ROLLOUT_INFER_BATCH_SIZE" \
     --ppo_epoch "$PPO_EPOCH" \
     --num_env_steps "$NUM_ENV_STEPS" \
     --episode_length "$EPISODE_LENGTH" \

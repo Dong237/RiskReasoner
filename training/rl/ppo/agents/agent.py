@@ -253,7 +253,7 @@ class QwenLoRAgent:
         values = self.get_slice(values, obs_full_lengths, act_real_lengths)
         return values
     
-    def get_token_logits(self, obs_input_ids, obs_attn_mask, action_tokens, batch_infer=False):
+    def get_token_logits(self, obs_input_ids, obs_attn_mask, action_tokens, batch_infer_size=None):
         """
         Retrieves the logits for each token in the combined observation+action sequence.
         Can perform inference in batches if `batch_infer` is True.
@@ -277,13 +277,13 @@ class QwenLoRAgent:
         obs_act_ids = torch.cat([obs_input_ids, action_tokens], dim=1)
         obs_act_mask = torch.cat([obs_attn_mask, act_attn_mask], dim=1)
         # Optionally perform batch inference to handle large inputs
-        if batch_infer:
+        if batch_infer_size:
             # Get the logtis with respect to action tokens
             with self.actor.disable_adapter():
                 # This is the reference logits
-                rho_logits = self.batch_infer(self.actor, obs_act_ids, obs_act_mask, obs_full_lengths, act_real_lengths)
+                rho_logits = self.batch_infer(self.actor, obs_act_ids, obs_act_mask, obs_full_lengths, act_real_lengths, batch_infer_size)
             # This is the logits correspond to the policy model (to be trained in RL)      
-            pi_logits = self.batch_infer(self.actor, obs_act_ids, obs_act_mask, obs_full_lengths, act_real_lengths)
+            pi_logits = self.batch_infer(self.actor, obs_act_ids, obs_act_mask, obs_full_lengths, act_real_lengths, batch_infer_size)
         else:
             with self.actor.disable_adapter():
                 rho_outputs = self.actor(input_ids=obs_act_ids, attention_mask=obs_act_mask, return_dict=True)
@@ -336,7 +336,7 @@ class QwenLoRAgent:
             pos -= 1
         return pos
 
-    def get_joint_action_log_probs(self, obs_input_ids, obs_attn_mask, action_tokens, batch_infer=False):
+    def get_joint_action_log_probs(self, obs_input_ids, obs_attn_mask, action_tokens, batch_infer_size):
         """
         Computes the joint log probabilities of the actions (token sequences) and entropy for each sample.
 
@@ -350,7 +350,7 @@ class QwenLoRAgent:
                 - action_log_probs (torch.Tensor): Summed log probabilities of each token in the action, shape (batch_size,).
                 - entropies (torch.Tensor): Mean token-level entropy for each sequence, shape (batch_size,).
         """
-        pi_logits, _ = self.get_token_logits(obs_input_ids, obs_attn_mask, action_tokens, batch_infer=batch_infer)
+        pi_logits, _ = self.get_token_logits(obs_input_ids, obs_attn_mask, action_tokens, batch_infer_size)
         pi_log_softmax = torch.log_softmax(pi_logits, dim=-1)
         action_log_probs = []
         entropies = []
@@ -381,7 +381,7 @@ class QwenLoRAgent:
         return obs_input_ids, obs_attn_mask
     
     @torch.no_grad()
-    def infer_for_rollout(self, obs, batch_infer=False):
+    def infer_for_rollout(self, obs, batch_infer_size=None):
         """
         Generates actions and computes their value estimates and log probabilities
         for rollout collection in a training loop.
@@ -408,7 +408,7 @@ class QwenLoRAgent:
                 obs_input_ids, 
                 obs_attn_mask, 
                 action_tokens, 
-                batch_infer,
+                batch_infer_size,
                 )
             action_tokens = action_tokens.int().cpu().numpy()
             action_log_probs = action_log_probs.float().cpu().numpy()
@@ -416,7 +416,8 @@ class QwenLoRAgent:
         elif self.algo == "TPPO":
             # Token-level PPO
             values = self.get_token_values(obs, action_tokens).squeeze(-1)
-            pi_logits, _ = self.get_token_logits(obs, action_tokens, batch_infer=True)
+            # TODO adapt this if you use TPPO and want to use batch inference
+            pi_logits, _ = self.get_token_logits(obs, action_tokens, batch_infer_size=None) 
             pi_log_softmax = torch.log_softmax(pi_logits, dim=-1)
             token_log_probs = torch.gather(pi_log_softmax, -1, action_tokens.unsqueeze(-1)).squeeze(-1)
 
@@ -430,7 +431,7 @@ class QwenLoRAgent:
                 obs_input_ids, 
                 obs_attn_mask, 
                 action_tokens, 
-                batch_infer=True
+                batch_infer_size=None  # TODO adapt this if you use GRPO and want to use batch inference
                 )
             action_tokens = action_tokens.int().cpu().numpy()
             log_probs = action_log_probs.float().cpu().numpy()
@@ -488,7 +489,7 @@ class QwenLoRAgent:
             raise NotImplementedError
         return values
         
-    def infer_for_action_update(self, obs, action_tokens= None, batch_infer=False):
+    def infer_for_action_update(self, obs, action_tokens= None, batch_infer_size=None):
         """
         Computes log probabilities and entropies for a batch of (obs, action_tokens),
         typically used for policy gradient updates.
@@ -511,7 +512,7 @@ class QwenLoRAgent:
             obs_input_ids, 
             obs_attn_mask, 
             action_tokens,
-            batch_infer=batch_infer,
+            batch_infer_size,
             )
         return action_log_probs, entropies
     
