@@ -45,13 +45,13 @@ class RiskEnv:
         self.last_few_steps = None
 
     def reset(self):
-        self.set_seed(42)
         data_dict = random.choice(self.dataset)
             
         self.problem = self.instruction + data_dict["query_cot"]
         self.label = data_dict["choices"][int(data_dict["gold"])]  # "good" or "bad"
         
-        self.current_state = self.problem + "\n"  ## FIXME this needs adaptation
+        # NOTE "\n" here has an impact on the implementation in prm.py in the generate_input_texts method
+        self.current_state = self.problem + "\n" 
         self.empirical_state_window = len(self.current_state) + self.forward_window # would be around 4000
         obs = np.array([self.current_state], dtype=np.object_)
         self.step_count = 0
