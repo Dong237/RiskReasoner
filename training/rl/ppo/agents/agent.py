@@ -381,7 +381,7 @@ class QwenLoRAgent:
         return obs_input_ids, obs_attn_mask
     
     @torch.no_grad()
-    def infer_for_rollout(self, obs):
+    def infer_for_rollout(self, obs, batch_infer=False):
         """
         Generates actions and computes their value estimates and log probabilities
         for rollout collection in a training loop.
@@ -408,7 +408,7 @@ class QwenLoRAgent:
                 obs_input_ids, 
                 obs_attn_mask, 
                 action_tokens, 
-                batch_infer=True
+                batch_infer,
                 )
             action_tokens = action_tokens.int().cpu().numpy()
             action_log_probs = action_log_probs.float().cpu().numpy()
