@@ -112,6 +112,10 @@ class QwenLoRAgent:
                 torch_dtype=torch.float16,
             )
             
+            for name, param in model.named_parameters():
+                if "lora" in name:
+                    param.requires_grad = True  # Ensure LoRA layers are trainable
+
         model.half()
         return model
     
@@ -593,8 +597,10 @@ class QwenLoRAgent:
         Args:
             save_dir (str): Path to the directory containing the saved LoRA actor weights.
         """
-        print("load model")
         self.actor = self._init_actor(save_dir).to(self.device)
+        if self.algo != "GRPO":
+            logging.info("Load critic model based on lora actor model")
+            self.critic = self._init_critic().to(self.device)
 
     def train(self):
         """

@@ -260,6 +260,8 @@ def get_config():
     parser.add_argument("--use_policy_active_masks",
                         action='store_false', default=True, help="by default True, whether to mask useless data in policy loss.")
     parser.add_argument("--huber_delta", type=float, default=10.0, help=" coefficience of huber loss.")
+    parser.add_argument("--actor_lora_path", type=str, default=None,
+                        help='lora weiths for the actor model to continue the training from.')
 
     # run parameters
     parser.add_argument("--use_linear_lr_decay", action='store_true',

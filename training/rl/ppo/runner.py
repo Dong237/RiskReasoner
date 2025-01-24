@@ -78,6 +78,7 @@ class RiskRunner:
         self.save_interval = self.all_args.save_interval
         self.algo = self.all_args.algorithm_name
         self.rollout_infer_batch_size = self.all_args.rollout_infer_batch_size
+        self.actor_lora_path = self.all_args.actor_lora_path
 
         # Directory setup for logging and saving models
         self.run_dir = config["run_dir"]
@@ -107,6 +108,7 @@ class RiskRunner:
             self.all_args.max_new_tokens, 
             self.all_args.model_max_length,
             self.algo,
+            self.actor_lora_path,
             )
         
         # Initialize buffer

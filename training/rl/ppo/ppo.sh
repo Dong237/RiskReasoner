@@ -26,16 +26,17 @@ PRM_MODEL_NAME_OR_PATH="/data1/huggingface/Qwen2.5-7B-Instruct"
 PRM_LORA_WEIGHTS="model_weights/RiskPRM_v3_lora"
 ALGO="APPO"
 MINI_BATCH_SIZE=2           # batch size during ppo training
-ROLLOUT_INFER_BATCH_SIZE=4  # inference batch size during each rollout 
+ROLLOUT_INFER_BATCH_SIZE=2  # inference batch size during each rollout 
+N_ROLLOUT_THREADS=4         # this has an impact of inference batch when getting the reward
 PPO_EPOCH=3
-NUM_ENV_STEPS=100000
+NUM_ENV_STEPS=85000 # 100000
 EPISODE_LENGTH=25
 MAX_NEW_TOKENS=512
 MODEL_MAX_LENGTH=4096
-N_ROLLOUT_THREADS=8
 CRITIC_LR="5e-5"
 LR="1e-6"
 SAVE_INTERVAL=50
+ACTOR_LORA_PATH="logs/ppo/results/train_posterior/APPO/run4/models/episode_0150"
 
 LOG_FILE=""  # if set, we’ll redirect stdout/stderr to this file
 
@@ -173,6 +174,7 @@ python training/rl/ppo/train.py \
     --dataset_name "$DATASET_NAME" \
     --dataset_path "$DATASET_PATH" \
     --model_name_or_path "$MODEL_NAME_OR_PATH" \
+    --actor_lora_path "$ACTOR_LORA_PATH" \
     --prm_type "$PRM_TYPE" \
     --prm_model_name_or_path "$PRM_MODEL_NAME_OR_PATH" \
     --prm_lora_weights "$PRM_LORA_WEIGHTS" \
