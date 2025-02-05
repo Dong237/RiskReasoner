@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tqdm import tqdm
 from training.utils import get_grad_norm, huber_loss, mse_loss
 
 class GRPOTrainer:
@@ -13,7 +14,7 @@ class GRPOTrainer:
 
         self.clip_param = args.clip_param
         self.ppo_epoch = args.ppo_epoch
-        self.num_mini_batch = args.num_mini_batch
+        self.mini_batch_size = args.mini_batch_size
         self.value_loss_coef = args.value_loss_coef
         self.max_grad_norm = args.max_grad_norm       
         self.huber_delta = args.huber_delta
@@ -53,7 +54,8 @@ class GRPOTrainer:
 
         # policy update
         self.policy_optimizer.zero_grad()
-        cp_batch_size = int(batch_size // self.gradient_cp_steps)
+        assert batch_size >= self.gradient_cp_steps, "Batch size must be greater than or equal to gradient checkpointing steps"
+        cp_batch_size = max(int(batch_size // self.gradient_cp_steps), self.gradient_cp_steps)
         total_approx_kl = 0
         for start in range(0, batch_size, cp_batch_size):
             end = start + cp_batch_size
@@ -98,8 +100,8 @@ class GRPOTrainer:
         train_info['policy_grad_norm'] = 0
 
         update_time = 0
-        for _ in range(self.ppo_epoch):
-            data_generator = buffer.appo_sampler(self.num_mini_batch)
+        for _ in tqdm(range(self.ppo_epoch), desc="Running GRPO Epoch:"):
+            data_generator = buffer.appo_sampler(self.mini_batch_size)
             for sample in data_generator:
                 policy_loss, policy_grad_norm = self.ppo_update(sample)
                 train_info['policy_loss'] += policy_loss
