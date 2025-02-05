@@ -51,7 +51,7 @@ class GeneratorCoTN(GeneratorCoT):
         div, rem = divmod(self.N, self.batch_size)
         batch_schedule = [self.batch_size] * div + ([rem] if rem else [])
         results = []
-        for batch_size in batch_schedule:
+        for i, batch_size in enumerate(batch_schedule):
             results_batch = self.batch_predict(
                 prompt_batch=[prompt] * batch_size, 
                 choices_batch=[choices]*batch_size, 
@@ -61,6 +61,8 @@ class GeneratorCoTN(GeneratorCoT):
                 model=model,
                 return_prompt=False,
                 )
+            for j in range(batch_size):
+                results_batch[j]["id"] = i*batch_size + j
             results.extend(results_batch)
     
         return {
@@ -99,18 +101,18 @@ if __name__ == "__main__":
     }
     ]
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = "3"
-    num = 3
+    os.environ["CUDA_VISIBLE_DEVICES"] = "6"
+    num = 4
     folder = "datasets/posterior/split_output_test_balanced_posterior"
     file = f"questions_part_{num}.json"
-    output_dir = f"datasets/generator/test_balanced_posterior_generator_cot_N_sft_{num}.json"
+    output_dir = f"datasets/generator/test_balanced_posterior_generator_cot_N_ppo_{num}.json"
     
     generator = GeneratorCoTN(
-        model_name_or_path="/data/youxiang/huggingface/Qwen2.5-7B-Instruct", 
+        model_name_or_path="/data1/huggingface/Qwen2.5-7B-Instruct", 
         N=16,
-        batch_size=16,
-        max_new_tokens=2048, # unlike GeneratorCoT, 2048 is somehow too small for GeneratorCoTN
-        lora_weights="models/sft_3epochs"
+        batch_size=2,
+        max_new_tokens=4096, # unlike GeneratorCoT, 2048 is somehow too small for GeneratorCoTN
+        lora_weights="logs/ppo/results/train_posterior/APPO/run13/models/episode_0149"
         )
     
     data_path = os.path.join(folder, file)
