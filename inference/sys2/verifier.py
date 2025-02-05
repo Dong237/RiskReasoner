@@ -24,7 +24,7 @@ class Verifier:
         model_name_or_path: str = "Qwen2.5-Math-7B-Instruct",
         lora_weights: str = None,
         model_max_length: int = 4096, # 2048 is too small according to experience with Qwen2.5-7B
-        batch_sze: int = 8,
+        batch_size: int = 8,
         ):
         
         self.model_name_or_path = model_name_or_path
@@ -34,7 +34,7 @@ class Verifier:
         self.tokenizer = None
         
         self.model_max_length = model_max_length
-        self.batch_sze = batch_sze
+        self.batch_sze = batch_size
     
     
     @staticmethod
@@ -214,13 +214,13 @@ if __name__ == "__main__":
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
     
     setup_logging()
-    model_name_or_path = "/data/tangbo/plms/Qwen2.5-7B-Instruct-GPTQ-Int8" # "/data/youxiang/huggingface/Qwen2.5-7B-Instruct"
-    lora_weights = "/data/youxiang/repos/RiskReasoner/models/RiskPRM"
-    
-    # model_name_or_path = "models/RiskPRM_v2_full"
-    # lora_weights = None
-    
-    verifier = Verifier(model_name_or_path, lora_weights=lora_weights)
+    model_name_or_path = "/data1/huggingface/Qwen2.5-7B-Instruct"
+    lora_weights = "/data/youxiang/repos/RiskReasoner/model_weights/RiskPRM_v3_lora"
+
+    verifier = Verifier(
+        model_name_or_path, 
+        lora_weights=lora_weights,
+        batch_size=16)
     verifier.start_verifier()
     
     data = {
@@ -245,8 +245,10 @@ if __name__ == "__main__":
     
     responses = []
     data_with_scores = []
-    data_tb_verified = jload("datasets/generator/test_balanced_posterior_generator_cot_N.json")
-    for i, data in enumerate(data_tb_verified): #, desc="Processing data..."):
+    data_path = "datasets/generator/test_balanced_posterior_generator_cot_N_ppo.json"
+    data_tb_verified = jload(data_path)
+    logging.info(f"Data loaded from {data_path}")
+    for data in tqdm(data_tb_verified, desc="Processing data..."):
         response_best, data_scored = verifier.verify(data, save_N=True)
         responses.append(response_best)
         data_with_scores.append(data_scored)
@@ -254,13 +256,13 @@ if __name__ == "__main__":
     # save the whole reranked data including the prompts
     jdump(
         data_with_scores,
-        "datasets/verified/test_balanced_posterior_generator_cot_N_data_with_scores.json"
+        "datasets/verified/test_balanced_posterior_generator_cot_N_ppo_data_with_scores.json"
         )
     
     # save the best responses
     jdump(
         responses,
-        "datasets/verified/test_balanced_posterior_generator_cot_N_best_responses.json"
+        "datasets/verified/test_balanced_posterior_generator_cot_N_ppo_best_responses.json"
     )
     logging.info("Data saved successfully")
     
