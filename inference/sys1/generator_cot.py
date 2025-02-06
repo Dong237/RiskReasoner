@@ -175,7 +175,15 @@ class GeneratorCoT(BaseGenerator):
                     )["input_ids"].to(model.device)
                 # FIXME during index matching below, I skip over the first token since its variant is quite complicated
                 # and unstable. But luckily, there are always more than 2 matched tokens in the list so this should be fine.
-                indices = self.find_continuous_indices(matched_generated_ids[0][1:], generated_ids)
+                
+                if "llama" in tokenizer.name_or_path.lower():  
+                    matching_start = 2 # llama has a '<｜begin▁of▁sentence｜>' token at the beginning
+                elif "qwen" in tokenizer.name_or_path.lower():
+                    matching_start = 1
+                else:
+                    raise ValueError(f"Unknown tokenizer: {tokenizer.name_or_path}")
+                
+                indices = self.find_continuous_indices(matched_generated_ids[0][matching_start:], generated_ids)
                 try:
                     target_logits = generated_logits[indices[-1]][idx]
                 except:
