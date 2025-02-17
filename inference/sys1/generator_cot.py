@@ -176,9 +176,9 @@ class GeneratorCoT(BaseGenerator):
                 # FIXME during index matching below, I skip over the first token since its variant is quite complicated
                 # and unstable. But luckily, there are always more than 2 matched tokens in the list so this should be fine.
                 
-                if "llama" in tokenizer.name_or_path.lower():  
+                if "llama" in str(type(tokenizer)).lower():  
                     matching_start = 2 # llama has a '<｜begin▁of▁sentence｜>' token at the beginning
-                elif "qwen" in tokenizer.name_or_path.lower():
+                elif "qwen" in str(type(tokenizer)).lower():
                     matching_start = 1
                 else:
                     raise ValueError(f"Unknown tokenizer: {tokenizer.name_or_path}")

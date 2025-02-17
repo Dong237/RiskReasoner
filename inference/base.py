@@ -90,9 +90,9 @@ class BaseGenerator:
         are used later for performing masking and retrieving the probabilities.
         """
         good_tokens, bad_tokens = self._get_variation(good_token), self._get_variation(bad_token)
-        if "llama" in tokenizer.name_or_path.lower():  # llama has a '<｜begin▁of▁sentence｜>' token at the beginning
+        if "llama" in str(type(tokenizer)).lower():  # llama has a '<｜begin▁of▁sentence｜>' token at the beginning
             token_pos = -1
-        elif "qwen" in tokenizer.name_or_path.lower():
+        elif "qwen" in str(type(tokenizer)).lower():
             token_pos = 0
         else:
             raise ValueError(f"Unsupported tokenizer: {tokenizer.name_or_path}")
