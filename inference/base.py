@@ -175,7 +175,7 @@ class BaseGenerator:
         ):
         model_inputs = self.get_batch_model_inputs(prompt_batch, model, tokenizer)
         generation_cofig = self.get_generation_config(strategy=strategy)
-        if "llama" in tokenizer.name_or_path.lower():  # llama has a '<｜begin▁of▁sentence｜>' token at the beginning
+        if "llama" in str(type(tokenizer)).lower():  # llama has a '<｜begin▁of▁sentence｜>' token at the beginning
             generation_cofig.pad_token_id = tokenizer.eos_token_id
 
         with torch.no_grad():
