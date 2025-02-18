@@ -296,6 +296,8 @@ def grpo_function(
     trainer.save_model(training_args.output_dir)
     logging.info(f"Model saved to {training_args.output_dir}")
     training_args.distributed_state.wait_for_everyone()  # 等待所有进程加载
+    # TODO: the saved tokenizer_config.json leads to sentencepiece error, had to replace it manually
+    # further inspection needed
     tokenizer.save_pretrained(training_args.output_dir)
     logging.info(f"Tokenizer saved to {training_args.output_dir}")
 

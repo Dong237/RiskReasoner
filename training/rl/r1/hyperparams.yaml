@@ -16,7 +16,7 @@ dataset_id_or_path: datasets/posterior/train_posterior.parquet
 swanlab: true # 是否开启 Swanlab 
 workspace: Youxiang
 project: RiskReasoner-grpo
-experiment_name: R1-Distill-Llama-8B-4096
+experiment_name: R1-Distill-Llama-8B-4096-from500
 report_to: none
 
 # 训练参数
@@ -35,15 +35,22 @@ seed: 2025 # 随机种子，方便实验复现
 beta: 0.001 # KL 惩罚因子，调整过，参见下文介绍
 max_prompt_length: 1024 # 输入 prompt 最大长度，本实验基本不会有太大变化
 max_completion_length: 4096 # 输出回答长度，包含推理思维链，设为 4K 比较合适
-num_generations: 8
-temperature: 1.0
+num_generations: 16
+temperature: 0.7  # This controls the exploration
 use_vllm: true # 启用 vllm 来加速推理
 vllm_device: cuda:6 # 留出一张卡来启用 vllm 推理，参见下文介绍
-vllm_gpu_memory_utilization: 0.5
+vllm_gpu_memory_utilization: 0.6 #TODO soft this
 
 # Logging arguments
 logging_strategy: steps
 logging_steps: 1
 save_strategy: "steps"
-save_steps: 500 # 每隔多少步保存一次
+save_steps: 250 # 每隔多少步保存一次
 save_total_limit: 4 # 最多保存多少个模型
+
+# # Lora arguments
+# use_peft: true
+# lora_r: 32
+# lora_target_modules: ['q_proj', 'v_proj']
+# lora_task_type: "CAUSAL_LM"
+# # load_in_8bit: true 
