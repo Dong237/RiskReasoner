@@ -35,7 +35,7 @@ class GeneratorCoTN(GeneratorCoT):
             
     def _generate_for_all_questions(self, model, data_all: List[dict]):
         data_tb_verified = []
-        for data in tqdm(data_all, desc="Processing all questions..."):
+        for data in tqdm(data_all, desc="Processing all questions"):
             # NOTE since we are doing best-of-N or majority voting on single input 
             # question (i.e., already in batch) there is no proper way to do 
             # batch process of multiple questions for now
@@ -101,14 +101,16 @@ if __name__ == "__main__":
     }
     ]
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "4"
     num = 4
     folder = "datasets/posterior/split_output_test_balanced_posterior"
     file = f"questions_part_{num}.json"
-    output_dir = f"datasets/generator/test_balanced_posterior_generator_cot_N_llama_r1_{num}.json"
+    output_dir = f"datasets/generator/test_balanced_posterior_generator_cot_N_llama_r1_4096_1000_{num}.json"
     
     generator = GeneratorCoTN(
-        model_name_or_path="/data1/huggingface/DeepSeek-R1-Distill-Llama-8B",  # Qwen2.5-7B-Instruct", #
+        model_name_or_path="/data/youxiang/repos/RiskReasoner/model_weights/grpo-4096/checkpoint-1000",
+        # "/data/youxiang/repos/RiskReasoner/model_weights/grpo-4096/checkpoint-500",
+        # "/data1/huggingface/DeepSeek-R1-Distill-Llama-8B",  # Qwen2.5-7B-Instruct", #
         N=16,
         batch_size=16,
         max_new_tokens=4096, # unlike GeneratorCoT, 2048 is somehow too small for GeneratorCoTN
