@@ -111,7 +111,7 @@ class APPOTrainer:
         """
         # Compute the log ratio between new and old policies
         log_ratio = log_prob_infer - log_prob_batch
-        imp_weights = torch.exp(log_ratio)
+        imp_weights = torch.exp(log_ratio)  # the real ratio without log
         
         # Approximate KL divergence
         approx_kl = ((imp_weights - 1) - log_ratio).mean()

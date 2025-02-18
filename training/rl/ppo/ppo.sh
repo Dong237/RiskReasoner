@@ -4,7 +4,7 @@
 # hyperparameters. Includes argument parsing, environment variable usage,
 # date-logging, and optional log-file redirection.
 ###############################################################################
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=0
 
 # Exit on error (e), treat unset variables as errors (u), and fail on any command
 # in a pipeline that fails (o pipefail).
@@ -29,14 +29,24 @@ MINI_BATCH_SIZE=2           # batch size during ppo training
 ROLLOUT_INFER_BATCH_SIZE=2  # inference batch size during each rollout 
 N_ROLLOUT_THREADS=4         # this has an impact of inference batch when getting the reward
 PPO_EPOCH=3
-NUM_ENV_STEPS=85000 # 100000
+NUM_ENV_STEPS=15000 #35000 #70000 #75000 # 80000 # 85000 # 100000
 EPISODE_LENGTH=25
 MAX_NEW_TOKENS=512
-MODEL_MAX_LENGTH=4096
+MODEL_MAX_LENGTH=2048
 CRITIC_LR="5e-5"
 LR="1e-6"
 SAVE_INTERVAL=50
-ACTOR_LORA_PATH="logs/ppo/results/train_posterior/APPO/run4/models/episode_0150"
+ACTOR_LORA_PATH="logs/ppo/results/train_posterior/APPO/run11/models/episode_0150"
+
+# "logs/ppo/results/train_posterior/APPO/run10/models/episode_0050"
+
+# "logs/ppo/results/train_posterior/APPO/run9/models/episode_0250"
+# "logs/ppo/results/train_posterior/APPO/run8/models/episode_0100"
+
+# "logs/ppo/results/train_posterior/APPO/run7/models/episode_0050"
+# "logs/ppo/results/train_posterior/APPO/run6/models/episode_0050"
+# "logs/ppo/results/train_posterior/APPO/run5/models/episode_0050"
+# "logs/ppo/results/train_posterior/APPO/run4/models/episode_0150"
 
 LOG_FILE=""  # if set, we’ll redirect stdout/stderr to this file
 
