@@ -19,6 +19,13 @@ class Prompts(Enum):
     SYSTEM_PROMPT_CREDIT_SCORING = (
         "You are a risk management assistant who is good at credit scoring."
     )
+    
+    SYSTEM_PROMPT_R1_FORMAT = (	
+        "A conversation between User and Assistant. The user asks a question, and the Assistant solves it."
+        "The assistant first thinks about the reasoning process in the mind and then provides the user"
+        "with the answer. The reasoning process is enclosed within <think> </think>"
+        "i.e., <think> reasoning process here </think> answer here"
+    )
 
     # Instructions
     INSTRUCTION_FREESTYLE = (
