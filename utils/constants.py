@@ -21,10 +21,10 @@ class Prompts(Enum):
     )
     
     SYSTEM_PROMPT_R1_FORMAT = (	
-        "A conversation between User and Assistant. The user asks a question, and the Assistant solves it."
-        "The assistant first thinks about the reasoning process in the mind and then provides the user"
-        "with the answer. The reasoning process is enclosed within <think> </think>"
-        "i.e., <think> reasoning process here </think> answer here"
+        "You are a risk management assistant who is good at credit scoring and about to do risk assessment."
+        "You should answer the query by first thinking about the reasoning process in the mind and then provides "
+        "the answer. The reasoning process is enclosed within <think>\n </think>"
+        "i.e., <think>\n reasoning process here </think> answer here"
     )
 
     # Instructions
@@ -77,4 +77,32 @@ class Prompts(Enum):
         "\"good\" or \"bad\", not any other texts or symbols. "
         f"For example: don't use **{SPLIT_TOKEN}: good**, instead just say {SPLIT_TOKEN}: good (without '**').\n\n"
         "Here is the customer's credit report:\n"
+    )
+    
+    EXPLANATION_FEATURES = (
+        "Here are the explanations of all features in a customer's redit report you need to consider:\n\n"
+        "Loan Information:\n"
+        "- Installment: Monthly payment required for the loan, ranging from $30.74 to $1466.04 in the population we study.\n"
+        "- Loan Purpose: The reason for taking the loan, with options such as debt consolidation, home improvement, small business, medical, moving, and more.\n"
+        "- Loan Application Type: Whether the loan is individual or joint. Possible values: 'Individual', 'Joint App'.\n"
+        "- Interest Rate: The annual interest rate on the loan, ranging from 5.31% to 30.99% in the population we study.\n"
+        "- Last Payment Amount: The most recent payment made, ranging from $0.0 to $41434.0 in the population we study.\n"
+        "- Loan Amount: The total loan amount requested, ranging from $1000.0 to $40000.0 in the population we study.\n"
+        "- Revolving Balance: The total revolving credit balance (e.g., credit cards), ranging from $0.0 to $669257.0 in the population we study.\n\n"
+        "History Information:\n"
+        "- Delinquency in 2 Years: Number of missed payments in the past 2 years, ranging from 0 to 20 in the population we study.\n"
+        "- Inquiries in 6 Months: The number of credit inquiries in the last 6 months, ranging from 0 to 7 in the population we study.\n"
+        "- Mortgage Accounts: The number of mortgage accounts held, ranging from 0 to 18 in the population we study.\n"
+        "- Grade: The loan grade based on creditworthiness, ranging from 'A' (best) to 'G' (worst).\n"
+        "- Open Accounts: The number of open credit accounts, ranging from 1 to 48 in the population we study.\n"
+        "- Revolving Utilization Rate: The percentage of available credit being used, ranging from 0% to 177.7% in the population we study.\n"
+        "- Total Accounts: The total number of credit accounts held, ranging from 2 to 95 in the population we study.\n"
+        "- Fico Range Low: The lower bound of the borrower’s FICO score, ranging from 660 to 845 in the population we study.\n"
+        "- Fico Range High: The upper bound of the borrower’s FICO score, ranging from 664 to 850 in the population we study.\n\n"
+        "Soft Information:\n"
+        "- Address State: The borrower’s state of residence. Possible values include all 50 US states (e.g., 'CA', 'NY', 'TX').\n"
+        "- Employment Length: The number of years the borrower has been employed. Options range from '< 1 year' to '10+ years' in the population we study.\n"
+        "- Home Ownership: The borrower’s homeownership status. Possible values: 'OWN', 'RENT', 'MORTGAGE', 'ANY', 'NONE', 'OTHER'.\n"
+        "- Verification Status: Whether the borrower’s income is verified. Possible values: 'Source Verified', 'Not Verified', 'Verified'.\n"
+        "- Annual Income: The borrower’s annual income, ranging from $0 to $2,000,000 in the population we study.\n\n"
     )

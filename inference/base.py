@@ -31,6 +31,7 @@ class BaseGenerator:
         top_p: float = 1.0, 
         model_max_length: int = 2048,    
         lora_weights: Optional[str] = None,
+        add_feature_explanations: bool = False,
         ):
 
         self.model_name_or_path = model_name_or_path
@@ -51,6 +52,9 @@ class BaseGenerator:
         self.step_tag = STEP_TAG
         self.split_token = SPLIT_TOKEN
         self.search_pattern = SEARCH_PATTERN
+        
+        self.add_feature_explanations = add_feature_explanations
+        self.explanation_features = Prompts.EXPLANATION_FEATURES.value
         
         setup_logging()
     
