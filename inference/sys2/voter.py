@@ -28,7 +28,7 @@ def process_element(element):
     selected_response = random.choice(majority_responses)
     
     # align keys for metrics computation
-    selected_response["label"] = selected_response.pop("gold_label")
+    # selected_response["label"] = selected_response.pop("gold_label")
     return selected_response
 
 def process_json(input_file):
@@ -49,9 +49,9 @@ def process_json(input_file):
 
 def main():
     # Specify the input JSON file (change the filename as needed)
-    input_filename = "datasets/generator/test_balanced_posterior_generator_cot_N_llama_r1_4096_1000.json"
+    input_filename = "datasets/generator/test_balanced_posterior_generator_cot_N_llama_r1_4096_2000.json"
     # Specify the output JSON file to store the selected responses
-    output_filename = "datasets/verified/test_balanced_posterior_generator_cot_N_llama_r1_4096_1000_voted_response.json"
+    output_filename = "datasets/verified/test_balanced_posterior_generator_cot_N_llama_r1_4096_2000_voted_response.json"
     
     setup_logging()
     
@@ -67,7 +67,7 @@ def main():
         logging.info(f"Processed {len(selected_results)} elements. Results saved to '{output_filename}'.")
 
     metrics = compute_binary_metrics_from_results(selected_results)
-    logging.info(f"Evaluation on the verifier-reranked results: {metrics}")
+    logging.info(f"Evaluation on the voted results: {metrics}")
         
 if __name__ == "__main__":
     main()
