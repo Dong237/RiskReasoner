@@ -97,7 +97,7 @@ class GeneratorCoT(BaseGenerator):
                 "reasoning_steps": response,
                 "pred_prob": probs,
                 "pred_label": pred_label,  # pred_label is integer or string "miss"
-                "gold_label": int(gold_labels[idx]), # ensure data type consistency
+                "label": int(gold_labels[idx]), # ensure data type consistency
             }
             if return_prompt:
                 result["prompt"] = prompt_batch[idx]
