@@ -245,11 +245,11 @@ class BaseGenerator:
     
     ## Save and Load data
     def save(self, data: List[dict], path: str):
-        jdump(data, path)
-        logging.info(f"Data saved to {path}")
+        if data:
+            jdump(data, path)
+            logging.info(f"Data saved to {path}")
 
     def load(self, path: str):
-        data = jload(path)
-        return data
-    
-    # TODO allow real-time jsonl data saving
+        if path:
+            data = jload(path)
+            return data
