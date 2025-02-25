@@ -19,8 +19,10 @@ from grpo_trainer import GRPOTrainer
 from utils.constants import Prompts, SPLIT_TOKEN, SEARCH_PATTERN, STEP_TAG
 from utils.helper import setup_logging
 
-INSTRUCTION = Prompts.INSTRUCTION_STEP_BY_STEP.value
+INSTRUCTION = Prompts.INSTRUCTION_STEP_BY_STEP_R1.value
 SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_R1_FORMAT.value
+REPORT_INTRO = Prompts.INTRO_CUSTOMER_CREDIT_REPORT.value
+EXPLANATIONS = Prompts.EXPLANATION_FEATURES.value
 COMPLETIONS_TO_LOG = []
 
 @dataclass
@@ -136,9 +138,10 @@ def get_dataset(
 
     # Add the 'query' and 'gold_label' fields
     def apply_template(item):
+        vanilla_prompt = instruction + EXPLANATIONS + REPORT_INTRO + item[text_field]
         message = [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": instruction + item[text_field]}
+            {"role": "user", "content": vanilla_prompt}
             ]
         prompt = tokenizer.apply_chat_template(
             message,
@@ -172,7 +175,7 @@ def grpo_function(
             if dataset_args.tokenizer_name_or_path
             else model_args.model_name_or_path
         ),
-        revision=model_args.model_revision,  
+        revision=model_args.model_revision, 
         trust_remote_code=model_args.trust_remote_code,  
     )
     if tokenizer.pad_token is None:
