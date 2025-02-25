@@ -14,7 +14,8 @@ from swanlab.integration.transformers import SwanLabCallback
 import torch
 from transformers import AutoTokenizer
 from transformers.trainer_utils import get_last_checkpoint
-from trl import GRPOConfig, GRPOTrainer, ModelConfig, TrlParser
+from trl import GRPOConfig, ModelConfig, TrlParser
+from grpo_trainer import GRPOTrainer
 from utils.constants import Prompts, SPLIT_TOKEN, SEARCH_PATTERN, STEP_TAG
 from utils.helper import setup_logging
 
@@ -32,7 +33,6 @@ class DatasetArguments:
 
 @dataclass
 class SwanlabArguments:
-    """SwanLab参数的数据类"""
 
     swanlab: bool
     workspace: str

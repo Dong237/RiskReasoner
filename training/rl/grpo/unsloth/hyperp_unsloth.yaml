@@ -1,0 +1,48 @@
+# 模型参数
+model_name_or_path: /data1/huggingface/Qwen2.5-3B-Instruct
+model_revision: main
+torch_dtype: bfloat16
+lora_r: 32
+lora_alpha: 32
+attn_implementation: flash_attention_2
+bf16: true
+tf32: true
+output_dir: model_weights/grpo-unsloth-test
+
+# dataset
+dataset_id_or_path: /data/youxiang/repos/unlock-deepseek/datasets/countdown/train.parquet
+# datasets/posterior/train_posterior.parquet
+
+# Swanlab
+swanlab: true
+workspace: Youxiang
+project: RiskReasoner-grpo-unsloth
+experiment_name: 
+report_to: none
+
+# Training parameters
+max_steps: 450 
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 4
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+learning_rate: 5.0e-7 
+lr_scheduler_type: cosine 
+warmup_ratio: 0.03 
+seed: 2025 
+
+# GRPO 
+beta: 0.001 
+optim: adamw_8bit # 优化器, 8bit加速
+max_prompt_length: 1024 
+max_completion_length: 4096 
+num_generations: 8
+use_vllm: true 
+vllm_gpu_memory_utilization: 0.6
+
+# Logging arguments
+logging_strategy: steps
+logging_steps: 1
+save_strategy: "steps"
+save_steps: 50 
