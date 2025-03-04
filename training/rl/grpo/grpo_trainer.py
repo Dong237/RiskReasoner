@@ -199,6 +199,7 @@ class GRPOTrainer(Trainer):
 
         if peft_config is not None:
             model = get_peft_model(model, peft_config)
+            model.print_trainable_parameters()
 
         # Reference model
         if is_deepspeed_zero3_enabled():
