@@ -8,7 +8,12 @@ from functools import reduce
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from utils.constants import Prompts, SPLIT_TOKEN, STEP_TAG
-from utils.helper import jload, jdump, compute_binary_metrics_from_results, setup_logging
+from utils.helper import (
+    jload, 
+    jdump, 
+    setup_logging,
+    compute_binary_metrics_from_results
+)
 
 SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_CREDIT_SCORING.value
 INSTRUCTION = Prompts.INSTRUCTION_STEP_BY_STEP.value
@@ -172,7 +177,6 @@ class Verifier:
             "pred_prob": [float(prob) for prob in response_best["pred_prob"]],  # get the prob for "good"
             "label": response_best["gold_label"],
             "solution_level_score": response_best["solution_level_score"],
-            
         }
         return response_best_keys_adapted, data_scored
     
