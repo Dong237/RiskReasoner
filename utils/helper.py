@@ -2,8 +2,10 @@ import os
 import io
 import json
 import netrc
+import jsonlines
 import logging
 import colorlog
+import pandas as pd
 from sklearn.metrics import (
     roc_auc_score, 
     precision_recall_curve, 
@@ -12,6 +14,7 @@ from sklearn.metrics import (
     roc_curve,
     accuracy_score
 )
+from sklearn.preprocessing import LabelEncoder
 
 
 ## file handling
@@ -63,42 +66,49 @@ def _make_r_io_base(f, mode: str):
         f = open(f, mode=mode)
     return f
 
+# training data with mode="train" and testing data with mode="test"
+def load_dataset(dataset_path):
+    if "jsonl" in dataset_path:
+        with jsonlines.open(dataset_path) as reader:
+            dataset = [line for line in reader]
+    else:
+        dataset = jload(dataset_path)
+    return dataset
+
 
 ## Logging
-def setup_logging():
-    # Set up file handler
-    file_handler = logging.FileHandler("app.log")  
+def setup_logging(log_file="app.log"):
+    # Set up file handler with full timestamp format
+    file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(
-        logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(message)s"
-            )
-        )
+        logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    )
 
-    # Set up color console handler using colorlog
+    # Set up color console handler with colorlog, but include timestamp in color handler
     color_handler = colorlog.StreamHandler()
-    color_handler.setFormatter(colorlog.ColoredFormatter(
-        "%(log_color)s%(levelname)s: %(message)s",
-        log_colors={
-            "DEBUG": "blue",
-            "INFO": "green",
-            "WARNING": "yellow",
-            "ERROR": "red",
-            "CRITICAL": "bold_red",
-        }
-    ))
+    color_handler.setFormatter(
+        colorlog.ColoredFormatter(
+            "%(log_color)s%(asctime)s - %(levelname)s - %(message)s",
+            log_colors={
+                "DEBUG": "blue",
+                "INFO": "green",
+                "WARNING": "yellow",
+                "ERROR": "red",
+                "CRITICAL": "bold_red",
+            }
+        )
+    )
 
     # Configure the root logger
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)  # Set the lowest log level to capture all messages
     logger.addHandler(file_handler)
     logger.addHandler(color_handler)
-    
+   
     
 ## Processing dataframes for fitting expert systems
-import pandas as pd
-from sklearn.preprocessing import LabelEncoder
 LABEL = "Loan Status"  # Global variable for the target column
-def preprocess_combined_data(train_data, test_data, threshold=5):
+def preprocess_combined_data(train_data, test_data, threshold=5, return_mapping=False):
     """
     Preprocess training and testing datasets by concatenating them,
     encoding categorical features, and then splitting them back.
@@ -107,6 +117,7 @@ def preprocess_combined_data(train_data, test_data, threshold=5):
         train_data (pd.DataFrame): Training dataset.
         test_data (pd.DataFrame): Testing dataset.
         threshold (int): Max unique values for one-hot encoding. Otherwise, label encoding is used.
+        return_mapping (bool): If True, return the mapping of label encoded values.
     
     Returns:
         pd.DataFrame, pd.DataFrame: Processed training and testing datasets.
@@ -137,6 +148,7 @@ def preprocess_combined_data(train_data, test_data, threshold=5):
         if column != LABEL and column != '__dataset_type'  # Exclude the LABEL and __dataset_type columns
     ]
 
+    mappings = dict()
     for column in categorical_columns:
         unique_values = combined_data[column].nunique()
 
@@ -153,11 +165,15 @@ def preprocess_combined_data(train_data, test_data, threshold=5):
             # Apply label encoding
             label_encoder = LabelEncoder()
             combined_data[column] = label_encoder.fit_transform(combined_data[column])
+            label_mapping = dict(zip(label_encoder.classes_, range(len(label_encoder.classes_))))
+            mappings[column] = label_mapping
 
     # Split back into train and test datasets
     train_data_processed = combined_data[combined_data['__dataset_type'] == 'train'].drop('__dataset_type', axis=1)
     test_data_processed = combined_data[combined_data['__dataset_type'] == 'test'].drop('__dataset_type', axis=1)
 
+    if return_mapping:
+        return train_data_processed, test_data_processed, mappings
     return train_data_processed, test_data_processed
 
 

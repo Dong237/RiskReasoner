@@ -29,7 +29,7 @@ class Verifier:
         model_name_or_path: str = "Qwen2.5-Math-7B-Instruct",
         lora_weights: str = None,
         model_max_length: int = 4096, # 2048 is too small according to experience with Qwen2.5-7B
-        batch_sze: int = 8,
+        batch_size: int = 8,
         ):
         
         self.model_name_or_path = model_name_or_path
@@ -39,7 +39,7 @@ class Verifier:
         self.tokenizer = None
         
         self.model_max_length = model_max_length
-        self.batch_sze = batch_sze
+        self.batch_sze = batch_size
     
     
     @staticmethod
@@ -218,13 +218,13 @@ if __name__ == "__main__":
     os.environ["CUDA_VISIBLE_DEVICES"] = "1"
     
     setup_logging()
-    model_name_or_path = "/data/tangbo/plms/Qwen2.5-7B-Instruct-GPTQ-Int8" # "/data/youxiang/huggingface/Qwen2.5-7B-Instruct"  # 
-    lora_weights = "models/RiskPRM"
-    
-    # model_name_or_path = "models/RiskPRM_v2_full"
-    # lora_weights = None
-    
-    verifier = Verifier(model_name_or_path, lora_weights=lora_weights)
+    model_name_or_path = "/data1/huggingface/Qwen2.5-7B-Instruct"
+    lora_weights = "/data/youxiang/repos/RiskReasoner/model_weights/RiskPRM_v3_lora"
+
+    verifier = Verifier(
+        model_name_or_path, 
+        lora_weights=lora_weights,
+        batch_size=8)
     verifier.start_verifier()
     
     data = {
@@ -235,21 +235,23 @@ if __name__ == "__main__":
                 "reasoning_steps": '### Step-by-Step Analysis:\n\n1. **Installment (583.51)**: This is the monthly payment towards the loan. A higher installment amount generally indicates a larger loan or higher monthly payments, which could pose a higher risk if the borrower cannot manage these payments. However, without more context on the total loan amount, it is initially neutral.\n\n2. **Loan Purpose (debt_consolidation)**: Debt consolidation can indicate that the borrower is attempting to simplify their financial obligations, which could be a positive sign if they are consolidating high-interest debts. This typically reduces overall interest expenses and might improve creditworthiness.\n\n3. **Loan Application Type (Individual)**: Being an individual application rather than a joint application does not inherently impact the risk level; however, it could imply less diversification in terms of financial support.\n\n4. **Interest Rate (15.99%)**: A relatively high interest rate suggests that the loan is likely to have higher costs over time. This increases the risk if the borrower struggles to make payments, but it also indicates that the lender sees some risk in the loan.\n\n5. **Last Payment Amount (20000.95)**: This seems unusually high for a loan payment, suggesting either an error or an exceptional payment. If verified, it could be a positive indicator that the borrower has sufficient funds to pay off a large portion of the loan, reducing future risk.\n\n6. **Loan Amount (24000.0)**: The loan amount is substantial, which is a significant risk factor. Higher loan amounts increase the burden on the borrower, especially if the interest rate is high.\n\n7. **Revolving Balance (21435.0)**: A high revolving balance indicates that the borrower is using a considerable amount of available credit, which could suggest financial strain. High utilization rates are typically viewed as negative for credit scores.\n\n8. **Delinquency In 2 years (0.0)**: No delinquencies in the past two years is a strong positive. It suggests timely payments and good credit history.\n\n9. **Inquiries In 6 Months (0.0)**: Zero inquiries in the past six months is positive, indicating that the borrower has not been aggressively seeking new credit, which can lower credit scores.\n\n10. **Mortgage Accounts (0.0)**: No mortgage accounts might be neutral unless the borrower is looking to take out a mortgage soon, in which case it could be a positive if they can qualify.\n\n11. **Grade (C)**: The grade C is below average, indicating a higher risk compared to better grades like A or B.\n\n12. **Open Accounts (9.0)**: Nine open accounts could be a mix of positive and negative. It shows stability in credit usage but also increases the complexity of managing multiple accounts.\n\n13. **Revolving Utilization Rate (75.50%)**: A high utilization rate suggests that the borrower is using a significant portion of their available credit, which is risky.\n\n14. **Total Accounts (16.0)**: Having 16 total accounts indicates diverse credit usage, which is usually viewed positively.\n\n15. **FICO Range (675.0 - 679.0)**: The FICO range is in the mid-600s, which is not ideal but still within a range that can secure loans with potentially higher interest rates.\n\n16. **Address State (CA)**: The state does not directly impact creditworthiness unless there are specific regional economic factors.\n\n17. **Employment Length (2 years)**: Two years of employment is decent but not long-term experience, which could indicate instability.\n\n18. **Home Ownership (RENT)**: Renting can slightly reduce creditworthiness as lenders prefer borrowers who own their homes.\n\n19. **Verification Status (Verified)**: Verification status being "verified" is positive as it confirms the accuracy of the application details.\n\n20. **Annual Income (75000.0)**: An annual income of $75,000 is substantial, providing a strong ability to repay the loan.\n\n### Combining All Factors:\nThe high interest rate, substantial loan amount, and high revolving balance are significant negative factors. The lack of delinquencies, verified application, and stable employment provide some positive indicators. The FICO score, while not excellent, is not a critical failure. Given the high probability of the loan being good (99.82%) according to the LightGBM model, and the overwhelming majority of positive factors, the risk is manageable.\n\n### Final Assessment: good',
                 "pred_label": 0,
                 "gold_label": 0,
-                "probs": [0.8, 0.2]
+                "pred_prob": [0.8, 0.2]
             },
             {
                 "id": 1,
                 "reasoning_steps": '1. **Installment (583.51)**: This is the monthly payment towards the loan. A higher installment amount generally indicates a larger loan or higher monthly payments, which could pose a higher risk if the borrower cannot manage these payments. However, without more context on the total loan amount, it is initially neutral.\n\n2. **Loan Purpose (debt_consolidation)**: Debt consolidation can indicate that the borrower is attempting to simplify their financial obligations, which could be a positive sign if they are consolidating high-interest debts. This typically reduces overall interest expenses and might improve creditworthiness.\n\n3. **Loan Application Type (Individual)**: Being an individual application rather than a joint application does not inherently impact the risk level; however, it could imply less diversification in terms of financial support.\n\n4. **Interest Rate (15.99%)**: A relatively high interest rate suggests that the loan is likely to have higher costs over time. This increases the risk if the borrower struggles to make payments, but it also indicates that the lender sees some risk in the loan.\n\n5. **Last Payment Amount (20000.95)**: This seems unusually high for a loan payment, suggesting either an error or an exceptional payment. If verified, it could be a positive indicator that the borrower has sufficient funds to pay off a large portion of the loan, reducing future risk.\n\n6. **Loan Amount (24000.0)**: The loan amount is substantial, which is a significant risk factor. Higher loan amounts increase the burden on the borrower, especially if the interest rate is high.\n\n7. **Revolving Balance (21435.0)**: A high revolving balance indicates that the borrower is using a considerable amount of available credit, which could suggest financial strain. High utilization rates are typically viewed as negative for credit scores.\n\n8. **Delinquency In 2 years (0.0)**: No delinquencies in the past two years is a strong positive. It suggests timely payments and good credit history.\n\n9. **Inquiries In 6 Months (0.0)**: Zero inquiries in the past six months is positive, indicating that the borrower has not been aggressively seeking new credit, which can lower credit scores.\n\n10. **Mortgage Accounts (0.0)**: No mortgage accounts might be neutral unless the borrower is looking to take out a mortgage soon, in which case it could be a positive if they can qualify.\n\n11. **Grade (C)**: The grade C is below average, indicating a higher risk compared to better grades like A or B.\n\n12. **Open Accounts (9.0)**: Nine open accounts could be a mix of positive and negative. It shows stability in credit usage but also increases the complexity of managing multiple accounts.\n\n13. **Revolving Utilization Rate (75.50%)**: A high utilization rate suggests that the borrower is using a significant portion of their available credit, which is risky.\n\n14. **Total Accounts (16.0)**: Having 16 total accounts indicates diverse credit usage, which is usually viewed positively.\n\n15. **FICO Range (675.0 - 679.0)**: The FICO range is in the mid-600s, which is not ideal but still within a range that can secure loans with potentially higher interest rates.\n\n16. **Address State (CA)**: The state does not directly impact creditworthiness unless there are specific regional economic factors.\n\n17. **Employment Length (2 years)**: Two years of employment is decent but not long-term experience, which could indicate instability.\n\n18. **Home Ownership (RENT)**: Renting can slightly reduce creditworthiness as lenders prefer borrowers who own their homes.\n\n19. **Verification Status (Verified)**: Verification status being "verified" is positive as it confirms the accuracy of the application details.\n\n20. **Annual Income (75000.0)**: An annual income of $75,000 is substantial, providing a strong ability to repay the loan.\n\n### Combining All Factors:\nThe high interest rate, substantial loan amount, and high revolving balance are significant negative factors. The lack of delinquencies, verified application, and stable employment provide some positive indicators. The FICO score, while not excellent, is not a critical failure. Given the high probability of the loan being good (99.82%) according to the LightGBM model, and the overwhelming majority of positive factors, the risk is manageable.\n\n### Final Assessment: good',
                 "pred_label": 0,
                 "gold_label": 0,
-                "probs": [0.8, 0.2]
+                "pred_prob": [0.8, 0.2]
             }
             ]
     }
     
     responses = []
     data_with_scores = []
-    data_tb_verified = jload("datasets/generator/test_balanced_posterior_generator_cot_N_sft.json")
+    data_path = "datasets/generator/test_balanced_posterior_generator_cot_N_ppo.json"
+    data_tb_verified = jload(data_path)
+    logging.info(f"Data loaded from {data_path}")
     for data in tqdm(data_tb_verified, desc="Processing data..."):
         response_best, data_scored = verifier.verify(data, save_N=True)
         responses.append(response_best)
@@ -258,13 +260,13 @@ if __name__ == "__main__":
     # save the whole reranked data including the prompts
     jdump(
         data_with_scores,
-        "datasets/verified/test_balanced_posterior_generator_cot_N_sft_data_with_scores.json"
+        "datasets/verified/test_balanced_posterior_generator_cot_N_ppo_data_with_scores.json"
         )
     
     # save the best responses
     jdump(
         responses,
-        "datasets/verified/test_balanced_posterior_generator_cot_N_sft_best_responses.json"
+        "datasets/verified/test_balanced_posterior_generator_cot_N_ppo_best_responses.json"
     )
     logging.info("Data saved successfully")
     

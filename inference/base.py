@@ -31,6 +31,7 @@ class BaseGenerator:
         top_p: float = 1.0, 
         model_max_length: int = 2048,    
         lora_weights: Optional[str] = None,
+        add_feature_explanations: bool = False,
         ):
 
         self.model_name_or_path = model_name_or_path
@@ -51,6 +52,9 @@ class BaseGenerator:
         self.step_tag = STEP_TAG
         self.split_token = SPLIT_TOKEN
         self.search_pattern = SEARCH_PATTERN
+        
+        self.add_feature_explanations = add_feature_explanations
+        self.explanation_features = Prompts.EXPLANATION_FEATURES.value
         
         setup_logging()
     
@@ -90,8 +94,14 @@ class BaseGenerator:
         are used later for performing masking and retrieving the probabilities.
         """
         good_tokens, bad_tokens = self._get_variation(good_token), self._get_variation(bad_token)
-        good_tokens_id = [tokenizer(token).input_ids[0] for token in good_tokens]
-        bad_tokens_id = [tokenizer(token).input_ids[0] for token in bad_tokens]
+        if "llama" in str(type(tokenizer)).lower():  # llama has a '<｜begin▁of▁sentence｜>' token at the beginning
+            token_pos = -1
+        elif "qwen" in str(type(tokenizer)).lower():
+            token_pos = 0
+        else:
+            raise ValueError(f"Unsupported tokenizer: {tokenizer.name_or_path}")
+        good_tokens_id = [tokenizer(token).input_ids[token_pos] for token in good_tokens]
+        bad_tokens_id = [tokenizer(token).input_ids[token_pos] for token in bad_tokens]
         if pred_token in good_tokens:
             idx = good_tokens.index(pred_token)
         elif pred_token in bad_tokens:
@@ -167,12 +177,14 @@ class BaseGenerator:
         return_inputs: bool = True
         ):
         model_inputs = self.get_batch_model_inputs(prompt_batch, model, tokenizer)
+        generation_cofig = self.get_generation_config(strategy=strategy)
+        if "llama" in str(type(tokenizer)).lower():  # llama has a '<｜begin▁of▁sentence｜>' token at the beginning
+            generation_cofig.pad_token_id = tokenizer.eos_token_id
+
         with torch.no_grad():
             generated_dict = self.model.generate(
                 **model_inputs,
-                generation_config=self.get_generation_config(
-                    strategy=strategy
-                    ),
+                generation_config=generation_cofig,
                 return_dict_in_generate=True,
                 output_logits=True,
                 output_scores=True,
@@ -232,11 +244,11 @@ class BaseGenerator:
     
     ## Save and Load data
     def save(self, data: List[dict], path: str):
-        jdump(data, path)
-        logging.info(f"Data saved to {path}")
+        if data:
+            jdump(data, path)
+            logging.info(f"Data saved to {path}")
 
     def load(self, path: str):
-        data = jload(path)
-        return data
-    
-    # TODO allow real-time jsonl data saving
+        if path:
+            data = jload(path)
+            return data

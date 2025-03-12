@@ -5,7 +5,7 @@ import logging
 from tqdm import tqdm
 from typing import Literal, Optional, List
 from inference.sys1.generator_cot import GeneratorCoT
-
+from utils.constants import Prompts
 
 class GeneratorCoTN(GeneratorCoT):   
      
@@ -19,7 +19,7 @@ class GeneratorCoTN(GeneratorCoT):
         super().__init__(**kwargs)
         self.cuda_visible_devices = cuda_visible_devices
         self.N = N                                            # N is the N from "best-of-N" sampling
-        self.generation_strategy = generation_strategy        # Overwrite the decoding method to "sampling"   
+        self.generation_strategy = generation_strategy        # Overwrite the decoding method to "sampling"  
         
     def __call__(self, data_all: List[dict]):
         return self.generate(data_all)
@@ -35,7 +35,7 @@ class GeneratorCoTN(GeneratorCoT):
             
     def _generate_for_all_questions(self, model, data_all: List[dict]):
         data_tb_verified = []
-        for data in tqdm(data_all, desc="Processing all questions..."):
+        for data in tqdm(data_all, desc="Processing all questions"):
             # NOTE since we are doing best-of-N or majority voting on single input 
             # question (i.e., already in batch) there is no proper way to do 
             # batch process of multiple questions for now
@@ -44,14 +44,23 @@ class GeneratorCoTN(GeneratorCoT):
         return data_tb_verified
 
     def _generate_for_single_question(self, model, data):
-        prompt = self.instruction + data["query_cot"]
+        
+        if self.add_feature_explanations:
+            cut = "Here is the customer\'s credit report:\n"
+            prompt = self.instruction.replace(cut, "") + self.explanation_features + cut + data["query_cot"]
+        else:
+            prompt = self.instruction + data["query_cot"]
+        
+        choices = data["choices"] 
+        gold_label = data["gold"]        
+        results = []
         choices = data["choices"] 
         gold_label = data["gold"]        
         
         div, rem = divmod(self.N, self.batch_size)
         batch_schedule = [self.batch_size] * div + ([rem] if rem else [])
         results = []
-        for batch_size in batch_schedule:
+        for i, batch_size in enumerate(batch_schedule):
             results_batch = self.batch_predict(
                 prompt_batch=[prompt] * batch_size, 
                 choices_batch=[choices]*batch_size, 
@@ -61,6 +70,8 @@ class GeneratorCoTN(GeneratorCoT):
                 model=model,
                 return_prompt=False,
                 )
+            for j in range(batch_size):
+                results_batch[j]["id"] = i*batch_size + j
             results.extend(results_batch)
     
         return {
@@ -100,17 +111,20 @@ if __name__ == "__main__":
     ]
 
     os.environ["CUDA_VISIBLE_DEVICES"] = "5"
-    num = 1
+    num = 4
     folder = "datasets/posterior/split_output_test_balanced_posterior"
     file = f"questions_part_{num}.json"
-    output_dir = f"datasets/generator/test_balanced_posterior_generator_cot_N_sft_{num}.json"
+    output_dir = f"datasets/generator/test_balanced_posterior_generator_cot_N_llama_r1_4096_1000_{num}.json"
     
     generator = GeneratorCoTN(
-        model_name_or_path="/data/youxiang/huggingface/Qwen2.5-7B-Instruct", 
+        model_name_or_path="/data/youxiang/repos/RiskReasoner/model_weights/grpo-4096/checkpoint-1000",
+        # "/data/youxiang/repos/RiskReasoner/model_weights/grpo-4096/checkpoint-500",
+        # "/data1/huggingface/DeepSeek-R1-Distill-Llama-8B",  # Qwen2.5-7B-Instruct", #
         N=16,
-        batch_size=8,
+        batch_size=4,
         max_new_tokens=4096, # unlike GeneratorCoT, 2048 is somehow too small for GeneratorCoTN
-        lora_weights="models/ppo/SparseRM" # "models/sft_3epochs"
+        # lora_weights="logs/ppo/results/train_posterior/APPO/run13/models/episode_0149"
+        add_feature_explanations=True,
         )
     
     data_path = os.path.join(folder, file)

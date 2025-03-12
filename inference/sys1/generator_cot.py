@@ -31,7 +31,14 @@ class GeneratorCoT(BaseGenerator):
             real_batch_size = end_idx - start_idx  # the last batch might be smaller than BATCH_SIZE
 
             # Prepare inputs for the batch
-            prompts = [self.instruction + item["query_cot"] for item in batch]
+            prompts = []
+            for item in batch:
+                if self.add_feature_explanations:
+                    cut = "Here is the customer\'s credit report:\n"
+                    prompt = self.instruction.replace(cut, "") + self.explanation_features + cut + item["query_cot"]
+                else:
+                    prompt = self.instruction + item["query_cot"]
+                prompts.append(prompt)
             choices_batch = [item["choices"] for item in batch]
             gold_labels = [item["gold"] for item in batch]
             record_ids = [item["id"] for item in batch]
@@ -90,7 +97,7 @@ class GeneratorCoT(BaseGenerator):
                 "reasoning_steps": response,
                 "pred_prob": probs,
                 "pred_label": pred_label,  # pred_label is integer or string "miss"
-                "gold_label": int(gold_labels[idx]), # ensure data type consistency
+                "label": int(gold_labels[idx]), # ensure data type consistency
             }
             if return_prompt:
                 result["prompt"] = prompt_batch[idx]
@@ -175,7 +182,15 @@ class GeneratorCoT(BaseGenerator):
                     )["input_ids"].to(model.device)
                 # FIXME during index matching below, I skip over the first token since its variant is quite complicated
                 # and unstable. But luckily, there are always more than 2 matched tokens in the list so this should be fine.
-                indices = self.find_continuous_indices(matched_generated_ids[0][1:], generated_ids)
+                
+                if "llama" in str(type(tokenizer)).lower():  
+                    matching_start = 2 # llama has a '<｜begin▁of▁sentence｜>' token at the beginning
+                elif "qwen" in str(type(tokenizer)).lower():
+                    matching_start = 1
+                else:
+                    raise ValueError(f"Unknown tokenizer: {tokenizer.name_or_path}")
+                
+                indices = self.find_continuous_indices(matched_generated_ids[0][matching_start:], generated_ids)
                 try:
                     target_logits = generated_logits[indices[-1]][idx]
                 except:
@@ -199,7 +214,7 @@ class GeneratorCoT(BaseGenerator):
 
 
 if __name__ == "__main__":
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     # Create a sample data dictionary
     data = [
     {
@@ -229,12 +244,13 @@ if __name__ == "__main__":
     ]
     
     generator = GeneratorCoT(
-        model_name_or_path="/data/youxiang/huggingface/Qwen2.5-7B-Instruct",
+        model_name_or_path="/data1/huggingface/Qwen2.5-7B-Instruct",
         batch_size=32,
+        add_feature_explanations=True,
     )
     
-    data = generator.load("datasets/posterior/train_posterior.json")
+    data = generator.load("datasets/posterior/test_balanced_posterior.json")
     
     results = generator(data)
-    generator.save(results, "datasets/generator/train_posterior_generator_cot.json")
+    generator.save(results, "datasets/generator/test_balanced_posterior_generator_cot_qwen_explanation.json")
     print("Final data saved")
