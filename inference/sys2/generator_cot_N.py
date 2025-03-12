@@ -46,7 +46,7 @@ class GeneratorCoTN(GeneratorCoT):
     def _generate_for_single_question(self, model, data):
         
         if self.add_feature_explanations:
-            cut = "Here is the customer\'s credit report:\n"
+            cut = Prompts.INTRO_CUSTOMER_CREDIT_REPORT.value
             prompt = self.instruction.replace(cut, "") + self.explanation_features + cut + data["query_cot"]
         else:
             prompt = self.instruction + data["query_cot"]
@@ -110,23 +110,23 @@ if __name__ == "__main__":
     }
     ]
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "6"
     num = 4
     folder = "datasets/posterior/split_output_test_balanced_posterior"
     file = f"questions_part_{num}.json"
-    output_dir = f"datasets/generator/test_balanced_posterior_generator_cot_N_llama_r1_4096_1000_{num}.json"
+    output_dir = f"datasets/generator/test_balanced_posterior_generator_cot_N_qwen_3B_expl_8192_2000_{num}.json"
     
     generator = GeneratorCoTN(
-        model_name_or_path="/data/youxiang/repos/RiskReasoner/model_weights/grpo-4096/checkpoint-1000",
-        # "/data/youxiang/repos/RiskReasoner/model_weights/grpo-4096/checkpoint-500",
-        # "/data1/huggingface/DeepSeek-R1-Distill-Llama-8B",  # Qwen2.5-7B-Instruct", #
+        model_name_or_path="/data1/huggingface/Qwen2.5-3B-Instruct",
         N=16,
-        batch_size=4,
-        max_new_tokens=4096, # unlike GeneratorCoT, 2048 is somehow too small for GeneratorCoTN
-        # lora_weights="logs/ppo/results/train_posterior/APPO/run13/models/episode_0149"
+        batch_size=8,
+        max_new_tokens=8192, 
+        lora_weights="model_weights/qwen3B-grpo-unsloth/checkpoint-2000",
         add_feature_explanations=True,
         )
     
+    generator.system_prompt = Prompts.SYSTEM_PROMPT_R1_FORMAT.value
+    generator.instruction = Prompts.INSTRUCTION_STEP_BY_STEP_R1.value
     data_path = os.path.join(folder, file)
     data = generator.load(os.path.join(folder, file))
     logging.info(f"Loaded data from {data_path}")

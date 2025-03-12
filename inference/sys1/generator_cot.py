@@ -6,6 +6,7 @@ import logging
 from tqdm import tqdm
 from typing import Literal, List
 from inference.base import BaseGenerator
+from utils.constants import Prompts
 
 
 class GeneratorCoT(BaseGenerator):    
@@ -34,7 +35,7 @@ class GeneratorCoT(BaseGenerator):
             prompts = []
             for item in batch:
                 if self.add_feature_explanations:
-                    cut = "Here is the customer\'s credit report:\n"
+                    cut = Prompts.INTRO_CUSTOMER_CREDIT_REPORT.value
                     prompt = self.instruction.replace(cut, "") + self.explanation_features + cut + item["query_cot"]
                 else:
                     prompt = self.instruction + item["query_cot"]
