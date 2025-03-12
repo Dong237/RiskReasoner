@@ -511,6 +511,7 @@ class GRPOTrainer(Trainer):
         advantages = (rewards - mean_grouped_rewards) / (std_grouped_rewards + 1e-4)
 
         # x - x.detach() allows for preserving gradients from x
+        # TODO this feels quite different than the real GRPO, need further inspection
         per_token_loss = torch.exp(per_token_logps - per_token_logps.detach()) * advantages.unsqueeze(1)
         per_token_loss = -(per_token_loss - self.beta * per_token_kl)
         loss = ((per_token_loss * completion_mask).sum(dim=1) / completion_mask.sum(dim=1)).mean()
