@@ -204,10 +204,6 @@ def grpo_function(
         last_checkpoint = None
         
     train_result = trainer.train(resume_from_checkpoint=last_checkpoint)  
-    
-    swanlab.init()
-    swanlab.log({"Prediction": COMPLETIONS_TO_LOG})
-    swanlab.finish()
 
     metrics = train_result.metrics
     metrics["train_samples"] = len(train_dataset)
