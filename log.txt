@@ -1,18 +1,0 @@
-[32mINFO: Loading model and tokenizer...[0m
-[32mINFO: PyTorch version 2.4.0 available.[0m
-/home/brain/anaconda3/envs/alignment/lib/python3.10/site-packages/auto_gptq/nn_modules/triton_utils/kernels.py:411: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.
-  def forward(ctx, input, qweight, scales, qzeros, g_idx, bits, maxq):
-/home/brain/anaconda3/envs/alignment/lib/python3.10/site-packages/auto_gptq/nn_modules/triton_utils/kernels.py:419: FutureWarning: `torch.cuda.amp.custom_bwd(args...)` is deprecated. Please use `torch.amp.custom_bwd(args..., device_type='cuda')` instead.
-  def backward(ctx, grad_output):
-/home/brain/anaconda3/envs/alignment/lib/python3.10/site-packages/auto_gptq/nn_modules/triton_utils/kernels.py:461: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.
-  @custom_fwd(cast_inputs=torch.float16)
-[33mWARNING: CUDA extension not installed.[0m
-[33mWARNING: CUDA extension not installed.[0m
-/home/brain/anaconda3/envs/alignment/lib/python3.10/site-packages/transformers/modeling_utils.py:4779: FutureWarning: `_is_quantized_training_enabled` is going to be deprecated in transformers 4.39.0. Please use `model.hf_quantizer.is_trainable` instead
-  warnings.warn(
-Loading checkpoint shards:   0%|          | 0/3 [00:00<?, ?it/s]Loading checkpoint shards:  33%|███▎      | 1/3 [00:02<00:05,  2.58s/it]Loading checkpoint shards:  67%|██████▋   | 2/3 [00:03<00:01,  1.51s/it]Loading checkpoint shards: 100%|██████████| 3/3 [00:03<00:00,  1.07it/s]Loading checkpoint shards: 100%|██████████| 3/3 [00:03<00:00,  1.20s/it]
-[32mINFO: Loading LoRA weights from /data/youxiang/repos/RiskReasoner/models/RiskPRM[0m
-[32mINFO: Model and tokenizer loaded successfully.[0m
-Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)
-[32mINFO: Data saved successfully[0m
-[32mINFO: Evaluation on the verifier-reranked results: {'accuracy': 0.8228228228228228, 'F1_score': 0.8004509582863585, 'ROC_AUC': 0.8641796799691536, 'PR_AUC': 0.8342990469670949, 'KS_score': 0.6487693592956751, 'miss_percentage': 0.001, 'num_valid': 999, 'num_total': 1000}[0m
