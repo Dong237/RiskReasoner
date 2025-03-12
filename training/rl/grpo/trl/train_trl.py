@@ -15,7 +15,7 @@ import torch
 from transformers import AutoTokenizer
 from transformers.trainer_utils import get_last_checkpoint
 from trl import GRPOConfig, ModelConfig, TrlParser
-from grpo_trainer import GRPOTrainer
+from training.rl.grpo.grpo_trainer import GRPOTrainer
 from utils.constants import Prompts, SPLIT_TOKEN, SEARCH_PATTERN, STEP_TAG
 from utils.helper import setup_logging
 
@@ -45,26 +45,15 @@ class SwanlabArguments:
 def format_reward_func(completions, **kwargs):
     rewards = []
     for completion in completions:
-        try:
+        # regex to match <think>\n text </think> specifically
+        format_regex = r"^<think>\n([^<]*(?:<(?!/?think>)[^<]*)*)<\/think>\n"
+        match_format = re.search(format_regex, completion, re.DOTALL)  
+        match_conclusion = re.search(SEARCH_PATTERN, completion, re.DOTALL)
 
-            if random.random() < 0.1:  
-                os.makedirs("completion_samples", exist_ok=True)
-                log_file = os.path.join("completion_samples", "completion_samples.txt")
-                with open(log_file, "a") as f:
-                    f.write(f"\n\n=====================================================\n")
-                    f.write(completion)  
-
-            # regex to match <think>\n text </think> specifically
-            format_regex = r"^<think>\n([^<]*(?:<(?!/?think>)[^<]*)*)<\/think>\n"
-            match_format = re.search(format_regex, completion, re.DOTALL)  
-            match_conclusion = re.search(SEARCH_PATTERN, completion, re.DOTALL)
-
-            if match_format and match_conclusion:
-                rewards.append(1.0)  
-            else:
-                rewards.append(0.0) 
-        except Exception:
-            rewards.append(0.0) 
+        if match_format and match_conclusion:
+            rewards.append(1.0)  
+        else:
+            rewards.append(-1.0) 
     return rewards
 
 def acc_reward_func(completions, label, **kwargs):
@@ -77,25 +66,17 @@ def acc_reward_func(completions, label, **kwargs):
         logging.warning(f"Error writing to JSONL file: {e}")
         
     rewards = []
-    completion_to_log = ""
     for completion, label_item in zip(completions, label):
-        try:
-            match = re.search(SEARCH_PATTERN, completion)
-            if match is None:
-                rewards.append(0.0) 
-                continue
-            conclusion = match.group().strip() 
-            if conclusion.split(SPLIT_TOKEN)[-1].split(":")[-1].strip() == label_item:
-                rewards.append(1.0)
-            else:
-                rewards.append(0.0) 
-        except Exception:
-            rewards.append(0.0) 
-
-        completion_to_log += completion + "\n\n" + "="*200
-    COMPLETIONS_TO_LOG.append(swanlab.Text(completion_to_log, caption=label_item))
+        match = re.search(SEARCH_PATTERN, completion)
+        if match is None:
+            rewards.append(-1.0) 
+            continue
+        conclusion = match.group().strip() 
+        if conclusion.split(SPLIT_TOKEN)[-1].split(":")[-1].strip() == label_item:
+            rewards.append(2.0)
+        else:
+            rewards.append(-2.0) 
     return rewards
-
 
 def get_checkpoint(training_args: GRPOConfig):
     last_checkpoint = None
@@ -212,7 +193,9 @@ def grpo_function(
     )        
 
     logging.info(
-        f'*** Starting training {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} for {training_args.num_train_epochs} epochs***'
+        f"""*** Starting training {
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            } for {training_args.num_train_epochs} epochs***"""
     )
 
     if training_args.resume_from_checkpoint:
