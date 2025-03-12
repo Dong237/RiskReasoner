@@ -53,7 +53,7 @@ def format_reward_func(completions, **kwargs):
     rewards = []
     for completion in completions:
         # regex to match <think>\n text </think> specifically
-        format_regex = r"^<think>\n([^<]*(?:<(?!/?think>)[^<]*)*)<\/think>\n"
+        format_regex = r'^(?=(?:(?!<think>).)*<think>(?:(?!<think>).)*$)<think>\n([^<]*(?:<(?!/?think>)[^<]*)*)<\/think>\n'
         match_format = re.search(format_regex, completion, re.DOTALL)  
         match_conclusion = re.search(SEARCH_PATTERN, completion, re.DOTALL)
 
