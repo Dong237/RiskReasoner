@@ -161,9 +161,11 @@ class GeneratorCoT(BaseGenerator):
         bad_token,
         idx
         ):
-        match = re.search(self.search_pattern, response, re.IGNORECASE)
-        if match:
-            matched_text = match.group(0)
+        # match = re.search(self.search_pattern, response, re.IGNORECASE)
+        matches = list(re.finditer(self.search_pattern, response))
+        if matches:
+            # Get that one last match
+            matched_text = matches[-1].group(0)
             # To clean up the matched text, this is vital!
             matched_text = matched_text.replace(self.step_tag, "").replace("\n", "").replace("*", "") # get rid of possible '*' to get clean ids later
             pred_token = matched_text.split(":")[-1] 
