@@ -11,7 +11,7 @@ from datasets import load_dataset
 from swanlab.integration.transformers import SwanLabCallback
 from transformers import AutoTokenizer
 from transformers.trainer_utils import get_last_checkpoint
-from utils.constants import Prompts, SPLIT_TOKEN, SEARCH_PATTERN, STEP_TAG
+from utils.constants import Prompts, SPLIT_TOKEN, SEARCH_PATTERN_RL_FORMAT
 from utils.helper import setup_logging
 from unsloth import is_bfloat16_supported
 from trl import GRPOConfig, GRPOTrainer, ModelConfig, TrlParser
@@ -55,12 +55,12 @@ def format_reward_func(completions, **kwargs):
         # regex to match <think>\n text </think> specifically
         format_regex = r'^(?=(?:(?!<think>).)*<think>(?:(?!<think>).)*$)<think>\n([^<]*(?:<(?!/?think>)[^<]*)*)<\/think>\n'
         match_format = re.search(format_regex, completion, re.DOTALL)  
-        match_conclusion = re.search(SEARCH_PATTERN, completion, re.DOTALL)
+        match_conclusion = re.search(SEARCH_PATTERN_RL_FORMAT, completion, re.DOTALL)
 
         if match_format and match_conclusion:
-            rewards.append(1.0)  
+            rewards.append(1.5)  
         else:
-            rewards.append(-1.0) 
+            rewards.append(-1.5) 
     return rewards
 
 def acc_reward_func(completions, label, **kwargs):
@@ -74,15 +74,31 @@ def acc_reward_func(completions, label, **kwargs):
         
     rewards = []
     for completion, label_item in zip(completions, label):
-        match = re.search(SEARCH_PATTERN, completion)
+        match = re.search(SEARCH_PATTERN_RL_FORMAT, completion)
         if match is None:
-            rewards.append(-1.0) 
+            rewards.append(-0.5) 
             continue
-        conclusion = match.group().strip() 
-        if conclusion.split(SPLIT_TOKEN)[-1].split(":")[-1].strip() == label_item:
+        prediction = match.group(1).strip() 
+        if prediction == label_item:
             rewards.append(2.0)
         else:
             rewards.append(-2.0) 
+    return rewards
+
+def ks_reward_func(completions, label, **kwargs):
+    rewards = []
+    for completion, label_item in zip(completions, label):
+        match = re.search(SEARCH_PATTERN_RL_FORMAT, completion)
+        if match is None:
+            rewards.append(-0.5) 
+            continue
+        default_risk = int(match.group(2))
+        if label_item == "good" and default_risk < 50:
+            rewards.append(1.0)
+        elif label_item == "bad" and default_risk > 50:
+            rewards.append(1.0) 
+        else:
+            rewards.append(-1.0)
     return rewards
 
 def get_checkpoint(training_args: GRPOConfig):
