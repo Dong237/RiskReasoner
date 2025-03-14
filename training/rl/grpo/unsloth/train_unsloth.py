@@ -16,10 +16,13 @@ from utils.helper import setup_logging
 from unsloth import is_bfloat16_supported
 from trl import GRPOConfig, GRPOTrainer, ModelConfig, TrlParser
 
-INSTRUCTION = Prompts.INSTRUCTION_STEP_BY_STEP.value
+INSTRUCTION = Prompts.INSTRUCTION_STEP_BY_STEP_R1_KS.value
 SYSTEM_PROMPT = Prompts.SYSTEM_PROMPT_R1_FORMAT.value
 REPORT_INTRO = Prompts.INTRO_CUSTOMER_CREDIT_REPORT.value
 EXPLANATIONS = Prompts.EXPLANATION_FEATURES.value
+
+GOOD_DEFAULT_RISK_BOUND = 30
+BAD_DEFAULT_RISK_BOUND = 70
 
 try:
     from unsloth import FastLanguageModel, PatchFastRL
@@ -66,7 +69,7 @@ def format_reward_func(completions, **kwargs):
 def acc_reward_func(completions, label, **kwargs):
     try:
         record = {"completions": completions, "label": label}
-        with open("acc_reward_samples.jsonl", "a", encoding="utf-8") as f:
+        with open("completions_unsloth.jsonl", "a", encoding="utf-8") as f:
             json_str = json.dumps(record, ensure_ascii=False)
             f.write(json_str + "\n")
     except Exception as e:
@@ -93,9 +96,9 @@ def ks_reward_func(completions, label, **kwargs):
             rewards.append(-0.5) 
             continue
         default_risk = int(match.group(2))
-        if label_item == "good" and default_risk < 50:
+        if label_item == "good" and default_risk < GOOD_DEFAULT_RISK_BOUND:
             rewards.append(1.0)
-        elif label_item == "bad" and default_risk > 50:
+        elif label_item == "bad" and default_risk > BAD_DEFAULT_RISK_BOUND:
             rewards.append(1.0) 
         else:
             rewards.append(-1.0)
@@ -211,6 +214,7 @@ def grpo_function(
         reward_funcs=[
             format_reward_func,  
             acc_reward_func, 
+            ks_reward_func,
         ],
         args=training_args,
         train_dataset=train_dataset,
