@@ -6,7 +6,14 @@ import logging
 from tqdm import tqdm
 from typing import Literal, List
 from inference.base import BaseGenerator
-from utils.constants import Prompts
+from utils.constants import (
+    Prompts, 
+    SEARCH_PATTERN_RL_FORMAT,
+    LOOSED_SEARCH_PATTERN_RL_FORMAT # allow texts after the final conclusion
+)
+
+# define which search pattern to use when using generated ks scores (default risk score)
+KS_SEARCH_PATTERN = LOOSED_SEARCH_PATTERN_RL_FORMAT # SEARCH_PATTERN_RL_FORMAT
 
 
 class GeneratorCoT(BaseGenerator):    
@@ -14,17 +21,27 @@ class GeneratorCoT(BaseGenerator):
         self, 
         batch_size: int = 1,
         generation_strategy: Literal["greedy", "sampling"] = "greedy",
+        use_generated_ks: bool = False,
         **kwargs,
         ):
+        """
+        Args:
+            batch_size (int, optional): Defaults to 1.
+            generation_strategy (Literal["greedy", "sampling"], optional): Defaults to "greedy".
+            use_generated_ks (bool, optional): Whether to use the default risk score generated in model's response
+            as the predicted probabilities to calculate KS score. If True vllm is used to speed up inference. defaults to False.
+        """
+
         super().__init__(**kwargs)
         self.batch_size = batch_size 
         self.generation_strategy = generation_strategy
+        self.use_generated_ks = use_generated_ks 
     
     def __call__(self, data_all: List[dict]):
         return self.generate(data_all)
     
     def generate(self, data_all: List[dict]):
-        self.start_service()
+        self.start_service(use_vllm=self.use_generated_ks)
         results = []
         for start_idx in tqdm(range(0, len(data_all), self.batch_size), desc="Processing batches"):
             end_idx = min(start_idx + self.batch_size, len(data_all))
@@ -52,6 +69,7 @@ class GeneratorCoT(BaseGenerator):
                 gold_labels,
                 real_batch_size,
                 model=self.model, # using single device, just pass in self.model 
+                vllm_inference=self.use_generated_ks,
                 )
 
             # Append batch results to overall results
@@ -67,43 +85,75 @@ class GeneratorCoT(BaseGenerator):
         real_batch_size,
         model=None,
         return_prompt=True,
+        vllm_inference=False,
         ):
         
         """
         Predict for a batch of data and return the results.
         """
-        model_inputs, generated_dict = self.generate_for_batch(
-            prompt_batch, 
-            model, 
-            self.tokenizer, 
-            self.generation_strategy
-            )
-
-        # Process each result in the batch
-        results = []
-        for idx in range(real_batch_size):
-            # Make prediction
-            probs, pred_label, response = self.predict_token_and_probs(
-                model,
-                self.tokenizer,
-                model_inputs, 
-                generated_dict, 
-                choices_batch, 
-                idx
+        if vllm_inference:
+            sampling_params = self.get_generation_config_vllm(self.generation_strategy)
+            prompt_templated_batch = self.apply_batch_template(
+                prompt_batch, 
+                self.tokenizer
+                )
+            vllm_outputs = self.model.generate(
+                prompt_templated_batch, 
+                sampling_params=sampling_params,
+                use_tqdm=False,
                 )
             
-            # Prepare the result dictionary
-            result = {
-                "id": record_ids[idx],
-                "reasoning_steps": response,
-                "pred_prob": probs,
-                "pred_label": pred_label,  # pred_label is integer or string "miss"
-                "label": int(gold_labels[idx]), # ensure data type consistency
-            }
-            if return_prompt:
-                result["prompt"] = prompt_batch[idx]
+            results = []
+            for idx in range(real_batch_size):
+                # Extract the generated text
+                response = vllm_outputs[idx].outputs[0].text
+                probs, pred_label = self.predict_token_and_probs_vllm(response, choices_batch, idx)
+                
+                # Prepare the result dictionary
+                result = {
+                    "id": record_ids[idx],
+                    "reasoning_steps": response,
+                    "pred_prob": probs,
+                    "pred_label": pred_label,
+                    "label": int(gold_labels[idx]),
+                }
+                if return_prompt:
+                    result["prompt"] = prompt_batch[idx]
+                results.append(result)
+        
+        else:
+            model_inputs, generated_dict = self.generate_for_batch(
+                prompt_batch, 
+                model, 
+                self.tokenizer, 
+                self.generation_strategy
+                )
 
-            results.append(result)
+            # Process each result in the batch
+            results = []
+            for idx in range(real_batch_size):
+                # Make prediction
+                probs, pred_label, response = self.predict_token_and_probs(
+                    model,
+                    self.tokenizer,
+                    model_inputs, 
+                    generated_dict, 
+                    choices_batch, 
+                    idx
+                    )
+                
+                # Prepare the result dictionary
+                result = {
+                    "id": record_ids[idx],
+                    "reasoning_steps": response,
+                    "pred_prob": probs,
+                    "pred_label": pred_label,  # pred_label is integer or string "miss"
+                    "label": int(gold_labels[idx]), # ensure data type consistency
+                }
+                if return_prompt:
+                    result["prompt"] = prompt_batch[idx]
+
+                results.append(result)
         return results
     
     def predict_token_and_probs(
@@ -215,9 +265,47 @@ class GeneratorCoT(BaseGenerator):
             logging.warning("Regex failed, making a random guess.")
             return 0.5, 0.5
 
+    def predict_token_and_probs_vllm(
+        self,
+        response,
+        choices, 
+        idx
+    ):
+        match = re.search(KS_SEARCH_PATTERN, response)
+        if match:
+            text_prediction = match.group(1).strip() 
+            default_risk = int(match.group(2))
+            
+            # Get pred_label
+            good_token, bad_token = choices[idx]
+            if good_token in text_prediction:
+                pred_label = 0
+            elif bad_token in text_prediction:
+                pred_label = 1
+            else:
+                pred_label = "miss"
+            
+            # Get probs
+            bad_prob = default_risk / 100
+            good_prob = 1 - bad_prob
+            
+        else:
+            # Only get the token prediction if generation of both token and default risk fails
+            text_prediction = response.lower().split(self.split_token.lower())[-1].replace(":", "").strip()
+            good_token, bad_token = choices[idx]
+            if good_token in text_prediction:
+                pred_label = 0
+            elif bad_token in text_prediction:
+                pred_label = 1
+            else:
+                pred_label = "miss"
+            good_prob, bad_prob = 0.5, 0.5
+        
+        return [good_prob, bad_prob], pred_label
+        
 
 if __name__ == "__main__":
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
     # Create a sample data dictionary
     data = [
     {
@@ -246,14 +334,20 @@ if __name__ == "__main__":
     }
     ]
     
+    model_path = "model_weights/qwen3B-ks-2048-0.9/checkpoint-1000"
+    output_dir = "datasets/generator/test_balanced_posterior_generator_cot_qwen_3B_ks-2048-1000.json"
     generator = GeneratorCoT(
-        model_name_or_path="/data1/huggingface/Qwen2.5-7B-Instruct",
-        batch_size=32,
+        model_name_or_path=model_path,
+        batch_size=16,
+        max_new_tokens=2048,
         add_feature_explanations=True,
+        use_generated_ks=True,
     )
+    generator.system_prompt = Prompts.SYSTEM_PROMPT_R1_FORMAT.value
+    generator.instruction = Prompts.INSTRUCTION_STEP_BY_STEP_R1_KS.value
     
     data = generator.load("datasets/posterior/test_balanced_posterior.json")
     
     results = generator(data)
-    generator.save(results, "datasets/generator/test_balanced_posterior_generator_cot_qwen_explanation.json")
+    generator.save(results, output_dir)
     print("Final data saved")
