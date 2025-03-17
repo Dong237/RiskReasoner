@@ -14,7 +14,8 @@ KS_TOKEN = "Default risk"
 SEARCH_PATTERN = r"\s*\*?\*?Final\s*[Aa]ssessment\*?\*?\s*:\s*(good|bad)\*?\*?"
 SEARCH_PATTERN_KS = r"\s*\*?\*?Default\s*[Rr]isk\*?\*?\s*:\s*((?:[1-9]|[1-9][0-9]|100))\b\*?\*?"
 # Search for the combined pattern
-SEARCH_PATTERN_RL_FORMAT = r"Final assessment: (good|bad)\s*\nDefault risk: ([1-9]|[1-9][0-9]|100)\s*$"
+SEARCH_PATTERN_RL_FORMAT = r"Final assessment: (good|bad)\s*\nDefault risk: (100|[1-9][0-9]|[1-9])\s*$"
+LOOSED_SEARCH_PATTERN_RL_FORMAT = r"Final assessment: (good|bad)\s*\nDefault risk: (100|[1-9][0-9]|[1-9])"
 
 # possible end tokens when inferencing with Qwen2.5-7B
 POSSIBLE_END_TOKENS = ['\n   \n', '\n  \n', '\n \n', '\n\n', '.\n\n', ':\n\n', ' \n\n']
