@@ -49,9 +49,9 @@ def process_json(input_file):
 
 def main():
     # Specify the input JSON file (change the filename as needed)
-    input_filename = "datasets/generator/test_balanced_posterior_generator_cot_N_llama_r1_4096_2000.json"
+    input_filename = "datasets/generator/test_balanced_posterior_generator_cot_N_llama_r1_expl_4096_500_unsloth.json"
     # Specify the output JSON file to store the selected responses
-    output_filename = "datasets/verified/test_balanced_posterior_generator_cot_N_llama_r1_4096_2000_voted_response.json"
+    output_filename = "datasets/verified/test_balanced_posterior_generator_cot_N_llama_r1_expl_4096_500_unsloth_voted_response.json"
     
     setup_logging()
     

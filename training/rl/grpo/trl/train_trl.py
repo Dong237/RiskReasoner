@@ -89,11 +89,11 @@ def ks_reward_func(completions, label, **kwargs):
             continue
         default_risk = int(match.group(2))
         if label_item == "good" and default_risk < GOOD_DEFAULT_RISK_BOUND:
-            rewards.append(1.0)
+            rewards.append(2.0)
         elif label_item == "bad" and default_risk > BAD_DEFAULT_RISK_BOUND:
-            rewards.append(1.0) 
+            rewards.append(2.0) 
         else:
-            rewards.append(-1.0)
+            rewards.append(-2.0)
     return rewards
 
 def get_checkpoint(training_args: GRPOConfig):

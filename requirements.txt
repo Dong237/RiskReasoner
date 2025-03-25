@@ -7,10 +7,12 @@ deepspeed==0.15.3
 datasets==2.21.0
 jieba==0.42.1
 tenacity==9.0.0
-transformers==4.45.2
+transformers
 xgboost==2.1.2
 scikit-learn==1.5.2
-trl==0.10.1
+trl==0.14.0
+## vllm
+torch
 bitsandbytes
 jsonlines
 peft

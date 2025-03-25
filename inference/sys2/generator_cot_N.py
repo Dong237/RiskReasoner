@@ -29,7 +29,7 @@ class GeneratorCoTN(GeneratorCoT):
             pass
         else:
             # No multi-GPU scenario
-            self.start_service()
+            self.start_service(self.use_generated_ks)
             data_tb_verified = self._generate_for_all_questions(self.model, data_all)
         return data_tb_verified
             
@@ -110,23 +110,36 @@ if __name__ == "__main__":
     }
     ]
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = "6"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "5"
     num = 4
     folder = "datasets/posterior/split_output_test_balanced_posterior"
     file = f"questions_part_{num}.json"
-    output_dir = f"datasets/generator/test_balanced_posterior_generator_cot_N_qwen_3B_expl_8192_2000_{num}.json"
+    output_dir = f"datasets/generator/test_balanced_posterior_generator_cot_N_llama_r1_expl_4096_500_unsloth_{num}.json"
     
+    # unsloth trained Qwen2.5-3B-Instruct
+    # generator = GeneratorCoTN(
+    #     model_name_or_path="/data1/huggingface/Qwen2.5-3B-Instruct",
+    #     N=16,
+    #     batch_size=8,
+    #     max_new_tokens=2048, 
+    #     # lora_weights="model_weights/qwen3B-grpo-unsloth/checkpoint-2000",
+    #     add_feature_explanations=True,
+    #     )
+    
+    # trl trained models
     generator = GeneratorCoTN(
-        model_name_or_path="/data1/huggingface/Qwen2.5-3B-Instruct",
+        model_name_or_path="model_weights/llama-ks-2048-1.0/checkpoint-500",
         N=16,
         batch_size=8,
-        max_new_tokens=8192, 
-        lora_weights="model_weights/qwen3B-grpo-unsloth/checkpoint-2000",
+        max_new_tokens=4096, 
+        # lora_weights="model_weights/llama-grpo-unsloth-4096/checkpoint-500",
+        temperature=1.0,
         add_feature_explanations=True,
+        generated_ks=True
         )
     
     generator.system_prompt = Prompts.SYSTEM_PROMPT_R1_FORMAT.value
-    generator.instruction = Prompts.INSTRUCTION_STEP_BY_STEP_R1.value
+    generator.instruction = Prompts.INSTRUCTION_STEP_BY_STEP_R1_KS.value
     data_path = os.path.join(folder, file)
     data = generator.load(os.path.join(folder, file))
     logging.info(f"Loaded data from {data_path}")

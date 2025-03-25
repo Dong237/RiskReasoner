@@ -305,7 +305,7 @@ class GeneratorCoT(BaseGenerator):
         
 
 if __name__ == "__main__":
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     # Create a sample data dictionary
     data = [
     {
@@ -334,8 +334,8 @@ if __name__ == "__main__":
     }
     ]
     
-    model_path = "model_weights/qwen3B-ks-2048-0.9/checkpoint-1000"
-    output_dir = "datasets/generator/test_balanced_posterior_generator_cot_qwen_3B_ks-2048-1000.json"
+    model_path = "/data1/huggingface/DeepSeek-R1-Distill-Llama-8B"
+    output_dir = "datasets/generator/test_balanced_posterior_generator_cot_llama-ks-2048-2000.json"
     generator = GeneratorCoT(
         model_name_or_path=model_path,
         batch_size=16,
