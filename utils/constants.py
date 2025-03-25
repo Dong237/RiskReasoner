@@ -6,10 +6,16 @@ from enum import Enum
 
 STEP_TAG = "\n\n"
 SPLIT_TOKEN = "Final assessment"
+KS_TOKEN = "Default risk"
+
 # NOTE change the search pattern accordingly when the SPLIT_TOKEN changes
 # also this search pattern is not pefect, it does not capture "\n\n**Final Assessment:** good"
 # namely when ** is between "good" and "assessment", but this is a flaw I am not smart enough to balance
 SEARCH_PATTERN = r"\s*\*?\*?Final\s*[Aa]ssessment\*?\*?\s*:\s*(good|bad)\*?\*?"
+SEARCH_PATTERN_KS = r"\s*\*?\*?Default\s*[Rr]isk\*?\*?\s*:\s*((?:[1-9]|[1-9][0-9]|100))\b\*?\*?"
+# Search for the combined pattern
+SEARCH_PATTERN_RL_FORMAT = r"Final assessment: (good|bad)\s*\nDefault risk: (100|[1-9][0-9]|[1-9])\s*$"
+LOOSED_SEARCH_PATTERN_RL_FORMAT = r"Final assessment: (good|bad)\s*\nDefault risk: (100|[1-9][0-9]|[1-9])"
 
 # possible end tokens when inferencing with Qwen2.5-7B
 POSSIBLE_END_TOKENS = ['\n   \n', '\n  \n', '\n \n', '\n\n', '.\n\n', ':\n\n', ' \n\n']
@@ -85,7 +91,7 @@ class Prompts(Enum):
         "from a trained machine learning system as reference (reference only, could be wrong). Explanations for "
         "features of customers mentioned in the credit report are provided beforehand\n\n"
         "Please analyze all information STEP BY STEP following these instructions:\n"
-        "1. **During your internal thinking process**: "
+        "1. **During your internal thinking process**: \n"
         "    - Go through each feature in the credit report, evaluate its significance to the customer's creditworthiness. "
         "Then use BOTH of your prior knowledge and explanations of feature meanings given to you to interpret the data.\n"
         "    - After understanding all features, do a thorough cross-referencing, i.e., cross-refer to all related features, "
@@ -101,9 +107,38 @@ class Prompts(Enum):
         "understand the requirements given above for how to reason.\n"
         "4. **In the end of your output during external reasoning**: after finishing the reasoning steps, first give a combined holistic assessment resulted "
         f"from your reasoning, then provided the final answer in the following format: '{SPLIT_TOKEN}: [choose from \"good\" or \"bad\"]'. "
-        "End you output with one of the assessment token, this means that your last output token can only be either "
+        "End your output with one of the assessment token, this means that your last output token can only be either "
         "\"good\" or \"bad\", not any other texts or symbols. "
         f"For example: don't use **{SPLIT_TOKEN}: good**, instead just say {SPLIT_TOKEN}: good (without '**').\n\n"
+    )
+    
+    INSTRUCTION_STEP_BY_STEP_R1_KS = (
+        "You are given a text describing a customer's credit report and predicted loan status (probabilities) "
+        "from a trained machine learning system as reference (reference only, could be wrong). Explanations for "
+        "features of customers mentioned in the credit report are provided beforehand\n\n"
+        "Please analyze all information STEP BY STEP following these instructions:\n"
+        "1. **During your internal thinking process**: \n"
+        "    - Go through each feature in the credit report, evaluate its significance to the customer's creditworthiness. "
+        "Then use BOTH of your prior knowledge and explanations of feature meanings given to you to interpret the data.\n"
+        "    - After understanding all features, do a thorough cross-referencing, i.e., cross-refer to all related features, "
+        "think thoroughly about how these interrelated features can make combined impact.\n" 
+        "    - During cross-referencing, you are encourage to interpret combined feature using sophisticated measure, such as calculating "
+        "some percentage or rate, for example the Debt-to-Income (DTI) Ratio. Also keep in mind that some features are more relevant than others e.g., soft information is "
+        "probably less significant compared to the loan or history information in most cases.\n"
+        "    - When you have doubts about your conclusion, repeat above process, jump back and forth through provided information "
+        "to seek evidence to validate your answer, give your educated final answer until you are confident.\n"
+        "2. **During your external reasoning step**: give structured reasoning steps based on your internal thinking, and then, "
+        "give a holistic assessment stating the most significant evidences that lead you to your conclusion. In the end, give your final answer. \n"
+        "3. **In the beginning of your output during internal thinking**: state how you would analyse this problem to show that you have fully "
+        "understand the requirements given above for how to reason.\n"
+        "4. **In the end of your output during external reasoning**: after finishing the reasoning steps, first give a combined holistic assessment resulted "
+        "from your reasoning as your argument of how you arrived at your final answer. Then give your final answer and end your output. \n"
+        "5. **For your final answer**: please provide TWO pieces of information in the following format as your final answer:\n"
+        f"'{SPLIT_TOKEN}: [choose from \"good\" or \"bad\"]'\n '{KS_TOKEN}: [number between 1-100]'\n"
+        "The default risk score should reflect your confidence in the loan outcome, where 1 means virtually no chance of default (definitely good) "
+        "and 100 means certain default (definitely bad). Scores between 30-70 indicate moderate uncertainty.\n"
+        "Ensure your risk score aligns with your binary classification - 'good' ratings should generally have scores below 50, "
+        "while 'bad' ratings should have scores above 50.\n\n"
     )
     
     EXPLANATION_FEATURES = (

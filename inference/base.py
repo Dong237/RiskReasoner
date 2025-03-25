@@ -19,6 +19,10 @@ from utils.constants import (
     SPLIT_TOKEN, 
     SEARCH_PATTERN
 )
+try:
+    from vllm import LLM, SamplingParams
+except ImportError:
+    print("vLLM not installed. Install it if you wish to use it as a model backend.")
 
 
 class BaseGenerator:
@@ -132,12 +136,19 @@ class BaseGenerator:
             return list(range(start_index, start_index + pattern_length))
         return []
     
-    
     ### Loading Model and Tokenizer
-    def start_service(self):
-        self.model = self.load_model_to_device(device=None)
+    def start_service(self, use_vllm: bool = False):
         self.tokenizer = self.load_tokenizer()
-        logging.info("Model and tokenizer loaded successfully.")
+        if use_vllm:
+            self.model = self.load_vllm_model(device=None)
+            logging.info("Vllm Model loaded successfully.")
+        else:
+            self.model = self.load_model_to_device(device=None)
+            logging.info("HF Model and tokenizer loaded successfully.")
+    
+    def load_vllm_model(self, device: str = None):
+        model = LLM(self.model_name_or_path, tensor_parallel_size=1)
+        return model
 
     def load_model_to_device(self, device: int):
         logging.info("Loading model...")
@@ -195,6 +206,19 @@ class BaseGenerator:
             return generated_dict
     
     def get_batch_model_inputs(self, prompt_batch, model, tokenizer):
+
+        texts = self.apply_batch_template(prompt_batch, tokenizer)
+        # Tokenize the inputs as a batch 
+        # and pad to the max length in this batch
+        model_inputs = self.tokenizer(
+            texts, 
+            return_tensors="pt", 
+            padding=True,
+            truncation=True
+            ).to(model.device)
+        return model_inputs
+    
+    def apply_batch_template(self, prompt_batch, tokenizer):
         # Prepare the batch prompts
         messages = [
             [
@@ -210,16 +234,7 @@ class BaseGenerator:
             tokenize=False,
             add_generation_prompt=True,
         )
-
-        # Tokenize the inputs as a batch 
-        # and pad to the max length in this batch
-        model_inputs = self.tokenizer(
-            texts, 
-            return_tensors="pt", 
-            padding=True,
-            truncation=True
-            ).to(model.device)
-        return model_inputs
+        return texts
     
     def get_generation_config(self, strategy=Literal["greedy", "sampling"]):
         if strategy == "greedy":
@@ -241,6 +256,25 @@ class BaseGenerator:
         else:
             raise ValueError(f"Invalid generation strategy: {strategy}")
         return generation_config
+
+    def get_generation_config_vllm(self, strategy=Literal["greedy", "sampling"]):
+        if strategy == "greedy":
+            sampling_params = SamplingParams(
+                temperature=0.0,
+                top_p=1,
+                top_k=-1,
+                max_tokens=self.max_new_tokens
+            )    
+        elif strategy == "sampling":
+            sampling_params = SamplingParams(
+                temperature=self.temperature,
+                top_k=self.top_k,
+                top_p=self.top_p,
+                max_tokens=self.max_new_tokens
+            )
+        else:
+            raise ValueError(f"Invalid generation strategy: {strategy}")
+        return sampling_params
     
     ## Save and Load data
     def save(self, data: List[dict], path: str):
