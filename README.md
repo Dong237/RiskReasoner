@@ -45,11 +45,3 @@ The resources I recommand to have a better understanding of the ways to achieve 
     - ``rl``: right now, only contains the scripts for finetuning the generator using PPO, which is the seconda stage of the ReFT method.
 
       **Note** I have not finished the ReFT method as it should be yet, and the SFT and PPO finetunings are seperate for now.
-
-## In the future
-
-Some High Level TODOs:
- - [ ] Finish ReFT method and test its performance with the verifier.
- - [ ] Use the OmegaPRM to start PPO training again and evalaute the performance.
- - [ ] Explore how to widen the solution space of the generator using methods similar to [this one](https://arxiv.org/pdf/2309.17179)
- - [ ] Some other ideas waiting to be explored...
