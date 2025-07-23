@@ -80,6 +80,7 @@ def acc_reward_func(completions, label, **kwargs):
             rewards.append(-2.0) 
     return rewards
 
+# NOTE the sum of three reward functions takes on 11 different values
 def ks_reward_func(completions, label, **kwargs):
     rewards = []
     for completion, label_item in zip(completions, label):

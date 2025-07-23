@@ -1,3 +1,5 @@
+# These are the common used package for this repo
+# There might also be script-specific package (versions) and are to be found in respective folders
 # netrc
 pandas
 numpy

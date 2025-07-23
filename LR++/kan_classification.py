@@ -8,6 +8,7 @@ import torch
 from torch import nn
 from kan import KAN  # Import KAN correctly
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler  
 from sklearn.metrics import (
     accuracy_score,
     roc_auc_score,
@@ -30,6 +31,8 @@ warnings.filterwarnings("ignore")
 
 LABEL = "Loan Status"  # Global variable for the target column
 
+device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
+logging.info(f"Training on {device}")
 
 def ks_score(true_labels, predicted_probabilities):
     """Calculate the KS score."""
@@ -88,26 +91,28 @@ def train_and_evaluate_kan(
         X, y, test_size=validation_split, random_state=42
     )
     
+    # Normalize features - crucial for numerical stability on GPU
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_val_scaled = scaler.transform(X_val)
+    X_test_scaled = scaler.transform(testing_data[feature_columns])
+    
     # Convert data to PyTorch tensors
-    train_input = torch.tensor(X_train.values, dtype=torch.float32)
-    train_label = torch.tensor(y_train.values, dtype=torch.long)
-    val_input = torch.tensor(X_val.values, dtype=torch.float32)
-    val_label = torch.tensor(y_val.values, dtype=torch.long)
-    test_input = torch.tensor(testing_data[feature_columns].values, dtype=torch.float32)
-    test_label = torch.tensor(testing_data[LABEL].values, dtype=torch.long)
+    train_input = torch.tensor(X_train_scaled, dtype=torch.float32).to(device)
+    train_label = torch.tensor(y_train.values, dtype=torch.long).to(device)
+    val_input = torch.tensor(X_val_scaled, dtype=torch.float32).to(device)
+    val_label = torch.tensor(y_val.values, dtype=torch.long).to(device)
+    test_input = torch.tensor(X_test_scaled, dtype=torch.float32).to(device)
+    test_label = torch.tensor(testing_data[LABEL].values, dtype=torch.long).to(device)
     
     # Define KAN model
-    model = KAN(width=[len(feature_columns), 2*(len(feature_columns))+1, 2], grid=grid_size, k=k_value)
+    model = KAN(
+        width=[2,2],  # width=[len(feature_columns), 2*(len(feature_columns))+1, 2], 
+        grid=grid_size, 
+        k=k_value,
+        device=device
+        )
     model.auto_save
-    
-    # Define accuracy metric functions for training
-    def train_acc():
-        preds = torch.argmax(model(train_input), dim=1)
-        return torch.mean((preds == train_label).float())
-
-    def val_acc():
-        preds = torch.argmax(model(val_input), dim=1)
-        return torch.mean((preds == val_label).float())
     
     # Train the model
     logger.info(f"Training KAN model with grid={grid_size}, k={k_value}, optimizer={optimizer}, steps={steps}")
@@ -118,6 +123,15 @@ def train_and_evaluate_kan(
         'test_label': val_label
         }
     
+    # Define accuracy metric functions for training
+    def train_acc():
+        preds = torch.argmax(model(dataset['train_input']), dim=1)
+        return torch.mean((preds == model(dataset['train_label'])).type(torch.float32))
+
+    def val_acc():
+        preds = torch.argmax(model(dataset['test_input']), dim=1)
+        return torch.mean((preds == model(dataset['test_label'])).type(torch.float32))
+
     results = model.fit(
         dataset,
         metrics=(train_acc, val_acc),
@@ -141,7 +155,7 @@ def train_and_evaluate_kan(
     
     # Calculate metrics
     metrics = calculate_metrics(
-        true_labels=testing_data[LABEL].values, 
+        true_labels=test_label, # testing_data[LABEL].values, 
         predicted_probabilities=predicted_probabilities, 
         model_name="KAN", 
         best_hyperparameters=hyperparameters
