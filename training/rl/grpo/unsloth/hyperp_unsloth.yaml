@@ -21,7 +21,7 @@ report_to: none
 
 # Training parameters
 max_steps: 5000
-per_device_train_batch_size: 16
+per_device_train_batch_size: 4
 gradient_accumulation_steps: 8
 gradient_checkpointing: true
 gradient_checkpointing_kwargs:
@@ -35,7 +35,7 @@ seed: 2025
 beta: 0.001 
 optim: adamw_8bit # 优化器, 8bit加速
 max_prompt_length: 2048 
-max_completion_length: 4096 
+max_completion_length: 2048 
 num_generations: 8
 use_vllm: true 
 vllm_gpu_memory_utilization: 0.6

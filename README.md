@@ -21,10 +21,7 @@ The resources I recommand to have a better understanding of the ways to achieve 
 
 ## Quick Tour into repo
 
-1. ``preprocessor``: contains scripts for preprocessing data for the RiskReasoner
 
-    - ``prior.py``: process data needed for establishing baselines (e.g., expert systems, LLMs of direct inference)
-    - ``posterior.py``: add ML predictions to prompts for LLMs as reference (therefore "posterior" in the name)
 
 2. ``inference``: contains scripts for inference with the RiskReasoner
 

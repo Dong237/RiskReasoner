@@ -12,7 +12,7 @@ output_dir: model_weights/qwen3B-ks-2048-1.1
 dataset_id_or_path: datasets/posterior/train_posterior.parquet
 
 # Swanlab
-swanlab: true 
+swanlab: false 
 workspace: Youxiang
 project: RiskReasoner-grpo
 experiment_name: qwen3B-ks-2048-1.1
@@ -21,7 +21,7 @@ report_to: none
 # Training parameters
 max_steps: 2000
 num_train_epochs: 3
-per_device_train_batch_size: 2
+per_device_train_batch_size: 1
 gradient_accumulation_steps: 4
 gradient_checkpointing: true
 gradient_checkpointing_kwargs:
@@ -34,14 +34,14 @@ seed: 2025
 # GRPO 
 beta: 0.001 # KL penalty factor
 max_prompt_length: 2048 
-max_completion_length: 2048 
+max_completion_length: 1024 
 # num_generations controls the averaging process of reward computation
 # final_num_gen = num_generations*per_device_train_batch_size*num_gpus
-num_generations: 10 
+num_generations: 8 
 temperature: 0.9  # This controls the exploration
 use_vllm: true 
-vllm_device: cuda:6
-vllm_gpu_memory_utilization: 0.6
+vllm_device: cuda:5
+vllm_gpu_memory_utilization: 0.5
 
 # Logging arguments
 logging_strategy: steps

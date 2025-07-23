@@ -7,13 +7,23 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Tuple
 
+from unsloth import is_bfloat16_supported
+try:
+    from unsloth import FastLanguageModel, PatchFastRL
+    PatchFastRL("GRPO", FastLanguageModel)
+except Exception as e:
+    raise ImportError(
+        "请安装指定的 TRL 版本和 unsloth 库: "
+        "pip install git+https://github.com/huggingface/trl.git@e95f9fb74a3c3647b86f251b7e230ec51c64b72b\n"
+        "pip install unsloth"
+    )
+
 from datasets import load_dataset
 from swanlab.integration.transformers import SwanLabCallback
 from transformers import AutoTokenizer
 from transformers.trainer_utils import get_last_checkpoint
 from utils.constants import Prompts, SPLIT_TOKEN, SEARCH_PATTERN_RL_FORMAT
 from utils.helper import setup_logging
-from unsloth import is_bfloat16_supported
 from trl import GRPOConfig, GRPOTrainer, ModelConfig, TrlParser
 
 INSTRUCTION = Prompts.INSTRUCTION_STEP_BY_STEP_R1_KS.value
@@ -24,15 +34,6 @@ EXPLANATIONS = Prompts.EXPLANATION_FEATURES.value
 GOOD_DEFAULT_RISK_BOUND = 30
 BAD_DEFAULT_RISK_BOUND = 70
 
-try:
-    from unsloth import FastLanguageModel, PatchFastRL
-    PatchFastRL("GRPO", FastLanguageModel)
-except Exception as e:
-    raise ImportError(
-        "请安装指定的 TRL 版本和 unsloth 库: "
-        "pip install git+https://github.com/huggingface/trl.git@e95f9fb74a3c3647b86f251b7e230ec51c64b72b\n"
-        "pip install unsloth"
-    )
 
 
 @dataclass
